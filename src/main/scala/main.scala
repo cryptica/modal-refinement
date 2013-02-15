@@ -24,9 +24,9 @@ object MPRSParser {
     tokenType match {
       case xMPRSParser.MAY_RULE | xMPRSParser.MUST_RULE =>
         val children = getChildren(ast)
-        val lhs = makeNormalProcess(children(0))
+        val lhs = makeProcess(children(0))
         val action = makeAction(children(1))
-        val rhs = makeNormalProcess(children(2))
+        val rhs = makeProcess(children(2))
         tokenType match {
           case xMPRSParser.MAY_RULE =>
             new MayRule(lhs, action, rhs)
@@ -36,17 +36,15 @@ object MPRSParser {
       case _ => throw new IllegalTokenException("Expected a rule type, got " + tokenType)
     }
   }
-  private def makeNormalProcess(ast: CommonTree) =
-    Process.toNormalForm(makeProcess(ast))
   private def makeProcess(ast: CommonTree): Process = {
     val token = ast.getToken
     val tokenType = token.getType
     def getChildrenProcess() = getChildren(ast) map { makeProcess(_) }
     tokenType match {
-      case xMPRSParser.EMPTY => Empty
-      case xMPRSParser.CONSTANT => new Constant(token.getText)
-      case xMPRSParser.PARALLEL => new Parallel(getChildrenProcess)
-      case xMPRSParser.SEQUENTIAL => new Sequential(getChildrenProcess)
+      case xMPRSParser.EMPTY => Process.makeEmpty
+      case xMPRSParser.CONSTANT => Process.makeConstant(token.getText)
+      case xMPRSParser.PARALLEL => Process.makeParallel(getChildrenProcess)
+      case xMPRSParser.SEQUENTIAL => Process.makeSequential(getChildrenProcess)
       case _ => throw new IllegalTokenException("Expected a process, got " + tokenType)
     }
   }
@@ -56,7 +54,7 @@ object MPRSParser {
     val tokenType = token.getType
     if(tokenType == xMPRSParser.MPRS) {
       val children = getChildren(ast)
-      val initial = makeNormalProcess(children.head)
+      val initial = makeProcess(children.head)
       val rules = children.tail map { makeRule(_) }
       new MPRS(initial, rules)
     }
@@ -85,15 +83,20 @@ object Main extends App {
   }
 
   try {
-    val input = getClass.getResource("simple_mprw.xmts")
+    //val input = getClass.getResource("simple_mprw.xmts")
+    val input = getClass.getResource("vpda.xmts")
     val lexer = new xMPRSLexer(new ANTLRInputStream((input.openStream())))
     val tokens = new CommonTokenStream(lexer)
     val parser = new xMPRSParser(tokens)
-    val mprs = parser.mprs
-    val result = mprs.tree.asInstanceOf[CommonTree];
+    val mprsTree = parser.mprs
+    val result = mprsTree.tree.asInstanceOf[CommonTree];
     val list = treeToSeq(result)
-    val mprsObject = MPRSParser.fromAST(result)
-    println(mprsObject)
+    val mprs = MPRSParser.fromAST(result)
+    println(mprs)
+    if(mprs.isVPDA) {
+      println("As vPDA:")
+      mprs.asVPDA()
+    }
   }
   catch {
     case e: IOException => e.printStackTrace()
