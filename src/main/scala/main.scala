@@ -18,7 +18,7 @@ object MPRSParser {
       case _ => throw new IllegalTokenException("Expected an action, got " + tokenType)
     }
   }
-  private def makeRule(ast: CommonTree): RewriteRule = {
+  private def makeRule(ast: CommonTree): RewriteRule[String] = {
     val token = ast.getToken
     val tokenType = token.getType
     tokenType match {
@@ -36,7 +36,7 @@ object MPRSParser {
       case _ => throw new IllegalTokenException("Expected a rule type, got " + tokenType)
     }
   }
-  private def makeProcess(ast: CommonTree): Process = {
+  private def makeProcess(ast: CommonTree): Process[String] = {
     val token = ast.getToken
     val tokenType = token.getType
     def getChildrenProcess() = getChildren(ast) map { makeProcess(_) }
@@ -49,7 +49,7 @@ object MPRSParser {
     }
   }
 
-  def fromAST(ast: CommonTree): MPRS = {
+  def fromAST(ast: CommonTree): MPRS[String] = {
     val token = ast.getToken
     val tokenType = token.getType
     if(tokenType == xMPRSParser.MPRS) {
@@ -84,8 +84,8 @@ object Main extends App {
 
   try {
     //val input = getClass.getResource("simple_mprw.xmts")
-    //val input = getClass.getResource("vpda.xmts")
-    val input = getClass.getResource("rules_mprw.xmts")
+    val input = getClass.getResource("vpda.xmts")
+    //val input = getClass.getResource("rules_mprw.xmts")
     val lexer = new xMPRSLexer(new ANTLRInputStream((input.openStream())))
     val tokens = new CommonTokenStream(lexer)
     val parser = new xMPRSParser(tokens)
@@ -95,12 +95,15 @@ object Main extends App {
     val mprs = MPRSParser.fromAST(result)
     println(mprs)
     println("Applying rules:")
-    mprs.applyRules()
+    //mprs.applyRules()
     if(mprs.isVPDA) {
       println("As vPDA:")
       mprs.asVPDA()
       println("Actions: " + mprs.actions)
       println("Constants: " + mprs.constants)
+      val vpda = MVPDA.fromMPRS(mprs)
+      println("Cross product automaton:")
+      println(vpda)
     }
   }
   catch {

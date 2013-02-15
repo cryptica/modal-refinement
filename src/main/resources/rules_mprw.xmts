@@ -1,0 +1,11 @@
+mprs rules [
+    initial r
+
+    r a! a
+    r b! b
+    a a! a|a
+    a a! a|b
+    b b! b|b
+    b b! a|b
+]
+
