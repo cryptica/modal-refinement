@@ -77,7 +77,7 @@ case class +:[A](override val head: Process[A], override val tail: Process[A]) e
 }
 sealed abstract trait ComposedProcess[A] extends Process[A] {
   override def size = head.size + tail.size + 1
-  override def length = 1 + tail.size
+  override def length = 1 + tail.length
   override def isEmpty = false
   override def apply(idx: Int) = if(idx == 0) head else tail(idx - 1)
 }
@@ -120,30 +120,34 @@ sealed abstract class RewriteRule[A] {
   protected val ruleTypeString: String
   override def toString = lhs.toString + " " + action + ruleTypeString + " " + rhs.toString
 
-  private def findMatch(term: Process[A], process: Process[A])(implicit ord: Ordering[A]): Option[Process[A]] = (term, process) match {
-    case (Empty(), _) => throw new IllegalArgumentException("match from empty left hand side")
-    case (x, y) if x == y => Some(rhs)
-    case (x +: xs, y +: ys) if x == y => findMatch(xs, ys)
-    case (x, y +: ys) => findMatch(x, y) map {_ +: ys}
-    case (x |: xs, y |: ys) if x == y => findMatch(xs, ys)
-    case (x, y |: ys) => (findMatch(x, y) map { _ |: ys }) orElse
-    (findMatch(x, ys) map { y |: _ })
-    case _ => None
-  }
-  def apply(p: Process[A])(implicit ord: Ordering[A]): Option[Process[A]] = {
-    findMatch(lhs, p)
+  def apply(p: Process[A])(implicit ord: Ordering[A]): Set[Process[A]] = {
+    RewriteRule.findMatch(lhs, p, Set(rhs))
   }
 }
 object RewriteRule {
-  def unapply[A](rule : RewriteRule[A]) : Some[(Process[A], String, Process[A])] =
-    Some((rule.lhs, rule.action, rule.rhs))
+  def findMatch[A](term: Process[A], process: Process[A], replacement: Set[Process[A]])(implicit ord: Ordering[A]): Set[Process[A]] = (term, process) match {
+    case (Empty(), _) => throw new IllegalArgumentException("match from empty left hand side")
+    case (x, y) if x == y => replacement
+    case (x +: xs, y +: ys) if x == y => findMatch(xs, ys, replacement)
+    case (x, y +: ys) => findMatch(x, y, replacement) map {_ +: ys}
+    case (x |: xs, y |: ys) if x == y => findMatch(xs, ys, replacement)
+    case (x, y |: ys) => (findMatch(x, y, replacement) map { _ |: ys }) |
+    (findMatch(x, ys, replacement) map { y |: _ })
+    case _ => Set(process)
+  }
 }
-case class MayRule[A](override val lhs: Process[A], override val action: String, override val rhs: Process[A])
+case class MayRule[A](
+  override val lhs: Process[A],
+  override val action: String,
+  override val rhs: Process[A])
     extends RewriteRule[A] {
   override val ruleTypeString = "?"
 }
-case class MustRule[A](override val lhs: Process[A], override val action: String, override val rhs: Process[A])
-  extends RewriteRule[A] {
+case class MustRule[A](
+  override val lhs: Process[A],
+  override val action: String,
+  override val rhs: Process[A])
+    extends RewriteRule[A] {
   override val ruleTypeString = "!"
 }
 
@@ -191,12 +195,13 @@ class MPRS[A](val initial: Process[A], val rules: Seq[RewriteRule[A]])(implicit 
       states += state
       for {rule <- rules} {
         val result = rule(state)
-        result match {
-          case Some(res) if !states.contains(res) =>
+        if(result.nonEmpty) {
+          val res = result.head
+          if(!states.contains(res)) {
             println("Rule " + rule + " applied to " + state + " yields " + res)
             worklist += res
             states += res
-          case _ =>
+          }
         }
       }
     }

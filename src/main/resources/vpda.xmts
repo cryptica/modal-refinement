@@ -1,11 +1,8 @@
 mprs vpda [
     initial p.S
 
-    p.S a! p.S.R
     p.S a! p.S.S
     p.S b! p
 
-    q.S a! q.S.S 
-    q.S b! q
 ]
 

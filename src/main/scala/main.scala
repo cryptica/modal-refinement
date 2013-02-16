@@ -104,6 +104,8 @@ object Main extends App {
       val vpda = MVPDA.fromMPRS(mprs)
       println("Cross product automaton:")
       println(vpda)
+      println("Calculating fixpoint:")
+      vpda.applyRules()
     }
   }
   catch {
