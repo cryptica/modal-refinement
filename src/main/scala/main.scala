@@ -18,7 +18,7 @@ object MPRSParser {
       case _ => throw new IllegalTokenException("Expected an action, got " + tokenType)
     }
   }
-  private def makeRule(ast: CommonTree): RewriteRule[String] = {
+  private def makeRule(ast: CommonTree): List[RewriteRule[String]] = {
     val token = ast.getToken
     val tokenType = token.getType
     tokenType match {
@@ -28,10 +28,11 @@ object MPRSParser {
         val action = makeAction(children(1))
         val rhs = makeProcess(children(2))
         tokenType match {
-          case xMPRSParser.MAY_RULE =>
-            new MayRule(lhs, action, rhs)
-          case xMPRSParser.MUST_RULE =>
-            new MustRule(lhs, action, rhs)
+          case xMPRSParser.MAY_RULE => MayRule
+            List(new RewriteRule(MayRule, lhs, action, rhs))
+          case xMPRSParser.MUST_RULE => MustRule
+            List(new RewriteRule(MayRule, lhs, action, rhs),
+                 new RewriteRule(MustRule, lhs, action, rhs))
         }
       case _ => throw new IllegalTokenException("Expected a rule type, got " + tokenType)
     }
@@ -54,9 +55,10 @@ object MPRSParser {
     val tokenType = token.getType
     if(tokenType == xMPRSParser.MPRS) {
       val children = getChildren(ast)
-      val initial = makeProcess(children.head)
-      val rules = children.tail map { makeRule(_) }
-      new MPRS(initial, rules)
+      val initialLHS = makeProcess(children(0))
+      val initialRHS = makeProcess(children(1))
+      val rules = (children.drop(2) map { makeRule(_) }).flatten
+      new MPRS(initialLHS, initialRHS, rules.toSet)
     }
     else {
       throw new IllegalTokenException("Expected a mPRS, got " + tokenType)
@@ -94,15 +96,13 @@ object Main extends App {
     val list = treeToSeq(result)
     val mprs = MPRSParser.fromAST(result)
     println(mprs)
-    println("Applying rules:")
-    //mprs.applyRules()
     if(mprs.isVPDA) {
       println("As vPDA:")
       mprs.asVPDA()
       println("Actions: " + mprs.actions)
       println("Constants: " + mprs.constants)
       val vpda = MVPDA.fromMPRS(mprs)
-      println("Cross product automaton:")
+      println("Attack rules automaton:")
       println(vpda)
       println("Calculating fixpoint:")
       vpda.applyRules()

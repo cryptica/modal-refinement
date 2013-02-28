@@ -15,6 +15,7 @@ sealed abstract class Process[A] {
   def head: Process[A]
   def tail: Process[A]
   def apply(idx: Int): Process[A]
+  def toList: List[A]
 
   def +:(p: Process[A]): Process[A] = {
     (p, this) match {
@@ -45,6 +46,17 @@ sealed abstract class Process[A] {
     case (x |: xs, y |: ys) => (x zip y) |: (xs zip ys)
     case _ => throw new IllegalArgumentException("processes of unequal type")
   }
+  
+  def replace(term: Process[A], replacement: Set[Process[A]])(implicit ord: Ordering[A]): Set[Process[A]] = (term, this) match {
+    case (Empty(), _) => throw new IllegalArgumentException("match from empty left hand side")
+    case (x, y) if x == y => replacement
+    case (x +: xs, y +: ys) if x == y => ys.replace(xs, replacement)
+    case (x, y +: ys) => y.replace(x, replacement) map {_ +: ys}
+    case (x |: xs, y |: ys) if x == y => ys.replace(xs, replacement)
+    case (x, y |: ys) => (y.replace(x, replacement) map { _ |: ys }) |
+    (ys.replace(x, replacement) map { y |: _ })
+    case _ => Set(this)
+  }
 }
 
 case class Empty[A]() extends Process[A] {
@@ -56,6 +68,7 @@ case class Empty[A]() extends Process[A] {
   override def head = throw new UnsupportedOperationException("head of empty process")
   override def tail = throw new UnsupportedOperationException("tail of empty process")
   override def apply(idx: Int) = throw new IndexOutOfBoundsException(idx.toString)
+  override def toList = Nil
 }
 case class Const[A](id: A) extends Process[A] {
   override def toString = id.toString
@@ -66,6 +79,7 @@ case class Const[A](id: A) extends Process[A] {
   override def head = this
   override def tail = Empty()
   override def apply(idx: Int) = if(idx == 0) this else throw new IndexOutOfBoundsException(idx.toString)
+  override def toList = List(id)
 }
 case class |:[A](override val head: Process[A], override val tail: Process[A]) extends ComposedProcess[A] {
   override def toString = "(" + head.toString + "|" + tail.toString + ")"
@@ -80,6 +94,7 @@ sealed abstract trait ComposedProcess[A] extends Process[A] {
   override def length = 1 + tail.length
   override def isEmpty = false
   override def apply(idx: Int) = if(idx == 0) head else tail(idx - 1)
+  override def toList = head.toList ::: tail.toList
 }
 
 class ProcessOrdering[A](ord: Ordering[A]) extends Ordering[Process[A]] {
@@ -110,58 +125,40 @@ object Process {
   }
 }
 
-sealed abstract class RewriteRule[A] {
-
-  val lhs: Process[A]
-  val action: String
-  val rhs: Process[A]
+case class RewriteRule[A](
+  val ruleType: RuleType,
+  val lhs: Process[A],
+  val action: String,
+  val rhs: Process[A]) {
   require(lhs != Empty[A]())
 
-  protected val ruleTypeString: String
-  override def toString = lhs.toString + " " + action + ruleTypeString + " " + rhs.toString
+  override def toString = lhs.toString + " " + action + ruleType + " " + rhs.toString
 
   def apply(p: Process[A])(implicit ord: Ordering[A]): Set[Process[A]] = {
-    RewriteRule.findMatch(lhs, p, Set(rhs))
+    p.replace(lhs, Set(rhs))
   }
 }
-object RewriteRule {
-  def findMatch[A](term: Process[A], process: Process[A], replacement: Set[Process[A]])(implicit ord: Ordering[A]): Set[Process[A]] = (term, process) match {
-    case (Empty(), _) => throw new IllegalArgumentException("match from empty left hand side")
-    case (x, y) if x == y => replacement
-    case (x +: xs, y +: ys) if x == y => findMatch(xs, ys, replacement)
-    case (x, y +: ys) => findMatch(x, y, replacement) map {_ +: ys}
-    case (x |: xs, y |: ys) if x == y => findMatch(xs, ys, replacement)
-    case (x, y |: ys) => (findMatch(x, y, replacement) map { _ |: ys }) |
-    (findMatch(x, ys, replacement) map { y |: _ })
-    case _ => Set(process)
-  }
+sealed abstract class RuleType
+case object MayRule extends RuleType {
+  override val toString = "?"
 }
-case class MayRule[A](
-  override val lhs: Process[A],
-  override val action: String,
-  override val rhs: Process[A])
-    extends RewriteRule[A] {
-  override val ruleTypeString = "?"
-}
-case class MustRule[A](
-  override val lhs: Process[A],
-  override val action: String,
-  override val rhs: Process[A])
-    extends RewriteRule[A] {
-  override val ruleTypeString = "!"
+case object MustRule extends RuleType {
+  override val toString = "!"
 }
 
 /**
  * The class MPRS represents a modal process rewrite system given
  * by an inital process and a set of rewrite rules.
  */
-class MPRS[A](val initial: Process[A], val rules: Seq[RewriteRule[A]])(implicit ord: Ordering[A]) {
+class MPRS[A](val initialLHS: Process[A], val initialRHS: Process[A],
+  val rules: Set[RewriteRule[A]])(implicit ord: Ordering[A]) {
   
-  val actions = rules map { _.action }
-  val constants = (initial.constants /: rules) { (set, rule) =>
-      set | rule.lhs.constants | rule.rhs.constants }
+  val actions = (rules map { _.action })
+  val constants = ((initialLHS.constants | initialRHS.constants) /: rules)
+    { (set, rule) => set | rule.lhs.constants | rule.rhs.constants }
 
-  override def toString = "Initial: " + initial + "\n" + rules.mkString("\n")
+  override def toString = "InitialLHS: " + initialLHS + "\n" +
+      "InitialRHS: " + initialRHS + "\n" + rules.mkString("\n")
   
   def asVPDA() = {
     rules foreach { rule =>
@@ -175,35 +172,13 @@ class MPRS[A](val initial: Process[A], val rules: Seq[RewriteRule[A]])(implicit 
   def isVPDA = {
     val arities = new scala.collection.mutable.HashMap[String, Int]()
     rules forall { rule => 
-      val (action, arity) = (rule.lhs, rule.action, rule.rhs) match {
-        case (_ +: Const(_), a, Const(_)) => (a, 0)
-        case (_ +: Const(_), a, _ +: Const(_)) => (a, 1)
-        case (_ +: Const(_), a, _ +: _ +: Const(_)) => (a, 2)
+      val (action, arity) = rule match {
+        case RewriteRule(_, _ +: Const(_), a, Const(_)) => (a, 0)
+        case RewriteRule(_, _ +: Const(_), a, _ +: Const(_)) => (a, 1)
+        case RewriteRule(_, _ +: Const(_), a, _ +: _ +: Const(_)) => (a, 2)
         case _ => ("", -1)
       }
       arity >= 0 && (arities.put(action, arity) forall { _ == arity })
-    }
-  }
-
-  def applyRules() {
-    val worklist = scala.collection.mutable.Queue(initial)
-    val states = scala.collection.mutable.HashSet(initial)
-    var i = 0
-    while(worklist.nonEmpty && i < 20) {
-      i += 1
-      val state = worklist.dequeue()
-      states += state
-      for {rule <- rules} {
-        val result = rule(state)
-        if(result.nonEmpty) {
-          val res = result.head
-          if(!states.contains(res)) {
-            println("Rule " + rule + " applied to " + state + " yields " + res)
-            worklist += res
-            states += res
-          }
-        }
-      }
     }
   }
 }

@@ -13,7 +13,8 @@ tokens {
 
     /* Options */
 
-    INITIAL='initial';
+    INITIAL_LHS='initialLHS';
+    INITIAL_RHS='initialRHS';
 
     /* Process */
 
@@ -53,7 +54,7 @@ WS          : (' '|'\n'|'\t'|'\r')+ { $channel = HIDDEN; };
  * PARSER RULES
  *------------------------------------------------------------------*/
 
-mprs        : MPRS ID (OB INITIAL process rule* CB)? -> ^(MPRS[$ID] process rule*);
+mprs        : MPRS ID (OB INITIAL_LHS process INITIAL_RHS process rule* CB)? -> ^(MPRS[$ID] process process rule*);
 
 
 /* Process */
