@@ -28,9 +28,9 @@ object MPRSParser {
         val action = makeAction(children(1))
         val rhs = makeProcess(children(2))
         tokenType match {
-          case xMPRSParser.MAY_RULE => MayRule
+          case xMPRSParser.MAY_RULE =>
             List(new RewriteRule(MayRule, lhs, action, rhs))
-          case xMPRSParser.MUST_RULE => MustRule
+          case xMPRSParser.MUST_RULE =>
             List(new RewriteRule(MayRule, lhs, action, rhs),
                  new RewriteRule(MustRule, lhs, action, rhs))
         }

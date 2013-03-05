@@ -1,20 +1,11 @@
 mprs vpda [
-    initialLHS r.E
-    initialRHS p.E
+    initialLHS p.S
+    initialRHS q.S
 
-    p.E coin? p.S.E
-    p.S coin? p.S.S
-    p.S tea! p
-    p.S process! q
-    q.S coffee? p
-    p.S coffee? p
+    p.S a? p.S
 
-    r.S coin! r.S.S
-    r.E coin! r.S.E
-    r.S tea! r
-    r.S process! t
-    r.S process! s
-    s.S coffee! s
-    r.S coffee! r
+    q.S a? q.R
+    q.R a? q.R
+    q.R b! q
 ]
 
