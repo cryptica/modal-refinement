@@ -5,63 +5,56 @@
  * @param lhs the origin state
  * @param rhs the set of possible destination states
  */
-case class AttackRule[A](lhs: (A, A), rhs: Set[List[A]]) {
-  val rhsInternalReturn = rhs filter { _.length <= 2 }
-  val rhsInternalCall = rhs filter { _.length >= 2 }
-
+case class AttackRule[A](lhs: List[A], rhs: Set[List[A]]) {
   override def toString =
-    lhs.toString + " -> " +(rhs map { _.mkString }).mkString("{",",","}")
+    lhs.mkString + " -> " +(rhs map { _.mkString }).mkString("{",",","}")
 }
 
-class LhsAttackSet[A]() {
-  val rules = new scala.collection.mutable.HashMap[(A, A),
-    List[ ( (A, A), List[A], Set[List[A]] )]]()
+abstract class AttackSet[A] {
+  type Elem
+  val rules = new scala.collection.mutable.HashMap[List[A], List[Elem]]()
+  
+  def elemEqual(oldElem: Elem, newElem: Elem): Boolean
 
-  def add(lhs: (A, A), rhsHead: (A, A), rhsTail: List[A], rhsRest: Set[List[A]]): Boolean = {
-    rules.get(rhsHead) match {
-      case Some(rhslist) =>
-        if(rhslist exists { rhs => rhs._1 == lhs && rhs._2 == rhsTail && rhs._3.subsetOf(rhsRest) }) false
+  def add(key: List[A], elem: Elem): Boolean = {
+    rules.get(key) match {
+      case Some(elemlist) =>
+        if(elemlist exists { elemEqual(_, elem) }) false
         else {
-          rules.put(rhsHead, (lhs, rhsTail, rhsRest) :: rhslist)
+          rules.put(key, elem :: elemlist)
           true
         }
       case None =>
-        rules.put(rhsHead, List((lhs, rhsTail, rhsRest)))
+        rules.put(key, List(elem))
         true
     }
   }
   
-  def get(rhsHead: (A, A)) = rules.get(rhsHead) match {
-    case Some(rhslist) => rhslist
+  def get(key: List[A]) = rules.get(key) match {
+    case Some(elemlist) => elemlist
     case None => Nil
   }
 }
 
-class RhsAttackSet[A]() {
-  val rules = new scala.collection.mutable.HashMap[(A, A), List[Set[List[A]]]]()
-
-  def add(rule: AttackRule[A]): Boolean = add(rule.lhs, rule.rhs)
-  private def add(lhs: (A, A), rhs: Set[List[A]]): Boolean = {
-    rules.get(lhs) match {
-      case Some(rhslist) =>
-        if(rhslist exists { _.subsetOf(rhs) }) false
-        else {
-          rules.put(lhs, rhs :: rhslist)
-          true
-        }
-      case None =>
-        rules.put(lhs, List(rhs))
-        true
-    }
-  }
-
-  def get(lhs: (A, A)) = rules.get(lhs) match {
-    case Some(rhslist) => rhslist
-    case None => Nil
+class LhsAttackSet[A] extends AttackSet[A] {
+  type Elem = ( List[A], List[A], Set[List[A]] )
+  
+  override def elemEqual(oldElem: Elem, newElem: Elem) = {
+    oldElem._1 == newElem._1 &&
+    oldElem._2 == newElem._2 &&
+    oldElem._3.subsetOf(newElem._3)
   }
 }
 
-class MVPDA[A](val initial: (A, A), val rules: Set[AttackRule[A]]) {
+class RhsAttackSet[A] extends AttackSet[A] {
+  type Elem = Set[List[A]]
+
+  override def elemEqual(oldElem: Elem, newElem: Elem) = {
+    oldElem.subsetOf(newElem)
+  }
+}
+
+class MVPDA[A](val initial: List[A], val rules: Set[AttackRule[A]]) {
   
   override def toString = rules.mkString("\n")
 
@@ -70,41 +63,47 @@ class MVPDA[A](val initial: (A, A), val rules: Set[AttackRule[A]]) {
     val rhsRules = new RhsAttackSet[A]()
     val worklist = new scala.collection.mutable.Queue[AttackRule[A]]()
     worklist ++= rules
-    while(worklist.nonEmpty) {
+    var refine = true
+    while(worklist.nonEmpty && refine) {
       val rule = worklist.dequeue
       println("Dequeued " + rule)
-      var isRhsRule = true
-      for{ lhsRhs <- rule.rhs } {
-        if(lhsRhs.length >= 2) {
-          val lhsRhsHead = (lhsRhs(0), lhsRhs(1))
-          val lhsRhsTail = lhsRhs.drop(2)
-          if(lhsRules.add(rule.lhs, lhsRhsHead, lhsRhsTail, rule.rhs - lhsRhs)) {
-            println("Added to LHS " + rule)
-            for{ rhsSet <- rhsRules.get(lhsRhsHead) } {
-              val newRhs = (rule.rhs - lhsRhs) | rhsSet
-              val newRule = AttackRule(rule.lhs, newRhs)
-              println("Created " + newRule)
+      if(rule.lhs == initial && rule.rhs.isEmpty) {
+        refine == false
+      }
+      else {
+        var isRhsRule = true
+        for{ lhsRhs <- rule.rhs } {
+          if(lhsRhs.length >= 2) {
+            val lhsRhsHead = lhsRhs.take(2)//(lhsRhs(0), lhsRhs(1))
+            val lhsRhsTail = lhsRhs.drop(2)
+            if(lhsRules.add(lhsRhsHead, (rule.lhs, lhsRhsTail, rule.rhs - lhsRhs))) {
+              println("Added to LHS " + rule)
+              for{ rhsSet <- rhsRules.get(lhsRhsHead) } {
+                val newRhs = (rule.rhs - lhsRhs) | rhsSet
+                val newRule = AttackRule(rule.lhs, newRhs)
+                println("Created from LHS " + newRule)
+                worklist += newRule
+              }
+            }
+          }
+          if(lhsRhs.length >= 3) {
+            isRhsRule = false
+          }
+        }
+        if(isRhsRule) {
+          if(rhsRules.add(rule.lhs, rule.rhs)) {
+            println("Added to RHS " + rule)
+            for{ (lhs, rhsTail, rhsRest) <- lhsRules.get(rule.lhs) } {
+              val newRhs = (rule.rhs map { _ ::: rhsTail }) | rhsRest
+              val newRule = AttackRule(lhs, newRhs)
+              println("Created from RHS " + newRule)
               worklist += newRule
             }
           }
         }
-        if(lhsRhs.length >= 3) {
-          isRhsRule = false
-        }
-      }
-      if(isRhsRule) {
-        if(rhsRules.add(rule)) {
-          println("Added to RHS " + rule)
-          for{ (lhs, rhsTail, rhsRest) <- lhsRules.get(rule.lhs) } {
-            val newRhs = (rule.rhs map { _ ::: rhsTail }) | rhsRest
-            val newRule = AttackRule(lhs, newRhs)
-            println("Created " + newRule)
-            worklist += newRule
-          }
-        }
       }
     }
-    if(rhsRules.get(initial) exists { _.isEmpty }) {
+    if(refine) {
       println("The states " + initial + " do not refine.\n")
     }
     else {
@@ -116,8 +115,8 @@ class MVPDA[A](val initial: (A, A), val rules: Set[AttackRule[A]]) {
 object MVPDA {
 
   def getAttacks[A](mprs: MPRS[A])(implicit ordA: Ordering[A]) = {
-    val states = mprs.rules flatMap { rule => rule.lhs.head.constants | rule.rhs.head.constants }
-    val symbols = mprs.rules flatMap { rule => rule.lhs.tail.constants | rule.rhs.tail.constants }
+    val states = (mprs.rules flatMap { rule => rule.lhs.head.constants | rule.rhs.head.constants }) | mprs.initialLHS.head.constants | mprs.initialRHS.head.constants
+    val symbols = (mprs.rules flatMap { rule => rule.lhs.tail.constants | rule.rhs.tail.constants }) | mprs.initialLHS.tail.constants | mprs.initialRHS.tail.constants
     println("States: " + states)
     println("Symbols: " + symbols)
     for
@@ -125,28 +124,25 @@ object MVPDA {
        state2 <- states
        symbol1 <- symbols
        symbol2 <- symbols
+       plhs1 = List(state1, symbol1)
+       plhs2 = List(state2, symbol2)
        rule1 <- mprs.rules
        lhs1 = rule1.lhs.toList; action1 = rule1.action; rhs1 = rule1.rhs.toList
        type1 = rule1.ruleType
-       if lhs1(0) == state1
-       if lhs1(1) == symbol1
+       if lhs1 == plhs1
       } yield {
          val rhs2list = for
          { rule2 <- mprs.rules
            lhs2 = rule2.lhs.toList; action2 = rule2.action; rhs2 = rule2.rhs.toList
            type2 = rule1.ruleType
-           if lhs2(0) == state2
-           if lhs2(1) == symbol2
-           if action1 == action2
+           if lhs2 == plhs2
            if type1 == type2
          } yield rhs2
          val (lhs3, rhs3) = type1 match {
            case MayRule => 
-             (((state1, state2), (symbol1, symbol2)),
-              (rhs2list map { rhs1 zip _ }).toSet)
+             (plhs1 zip plhs2, (rhs2list map { rhs1 zip _ }).toSet)
            case MustRule => 
-             (((state2, state1), (symbol2, symbol1)),
-              (rhs2list map { _ zip rhs1 }).toSet)
+             (plhs2 zip plhs1, (rhs2list map { _ zip rhs1 }).toSet)
          }
          AttackRule(lhs3, rhs3)
     }
@@ -155,6 +151,6 @@ object MVPDA {
   def fromMPRS[A](mprs: MPRS[A])(implicit ordA: Ordering[A]) = {
     val rules = getAttacks(mprs)
     val initial = mprs.initialLHS.toList zip mprs.initialRHS.toList
-    new MVPDA((initial(0), initial(1)), rules)
+    new MVPDA(initial, rules)
   }
 }
