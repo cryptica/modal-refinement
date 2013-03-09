@@ -2,10 +2,10 @@ mprs vpda [
     initialLHS p.S
     initialRHS q.S
 
-    p.S a? p.S
+    r.S r? r
+    p.S c? r.S.S
 
-    q.S a? q.R
-    q.R a? q.R
-    q.R b! q
+    q.S c? q.S.R
+    q.S r? q
 ]
 

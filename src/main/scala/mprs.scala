@@ -160,25 +160,4 @@ class MPRS[A](val initialLHS: Process[A], val initialRHS: Process[A],
   override def toString = "InitialLHS: " + initialLHS + "\n" +
       "InitialRHS: " + initialRHS + "\n" + rules.mkString("\n")
   
-  def asVPDA() = {
-    rules foreach { rule =>
-      val lhs = rule.lhs
-      val rhs = rule.rhs
-      println(lhs.head + " -> " + rhs.head + " (" + rule.action
-        + ";" + lhs.tail + "/" + rhs.tail + ")")
-    }
-  }
-
-  def isVPDA = {
-    val arities = new scala.collection.mutable.HashMap[String, Int]()
-    rules forall { rule => 
-      val (action, arity) = rule match {
-        case RewriteRule(_, _ +: Const(_), a, Const(_)) => (a, 0)
-        case RewriteRule(_, _ +: Const(_), a, _ +: Const(_)) => (a, 1)
-        case RewriteRule(_, _ +: Const(_), a, _ +: _ +: Const(_)) => (a, 2)
-        case _ => ("", -1)
-      }
-      arity >= 0 && (arities.put(action, arity) forall { _ == arity })
-    }
-  }
 }

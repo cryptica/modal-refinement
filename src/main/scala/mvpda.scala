@@ -1,6 +1,9 @@
+import scala.collection.mutable.HashSet
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.LinkedHashSet
 
 /**
- * The class AttackRule encodes a single or combined attack moves
+ * This class encodes a single or combined attack moves
  * with all the possible results from applying defending moves.
  * @param lhs the origin state
  * @param rhs the set of possible destination states
@@ -10,16 +13,36 @@ case class AttackRule[A](lhs: List[A], rhs: Set[List[A]]) {
     lhs.mkString + " -> " +(rhs map { _.mkString }).mkString("{",",","}")
 }
 
-abstract class AttackSet[A] {
+/**
+ * This class saves attack rules in a map with the key being a state
+ * on the left or right side. On lookup it returns a list of the remaining
+ * parts of all the matching attack rules.
+ * It may discard some elements on insertion if a more specialized attack
+ * rule is already contained.
+ */
+abstract class AttackRuleMap[A] {
+  // the type of the attack rule without the key element
   type Elem
-  val rules = new scala.collection.mutable.HashMap[List[A], List[Elem]]()
+  // map of the keys and list of matching elements
+  val rules = new HashMap[List[A], List[Elem]]()
   
-  def elemEqual(oldElem: Elem, newElem: Elem): Boolean
+  /**
+   * This function should return if a new element to be inserted
+   * can already be represented by an old more specialized element
+   * already contained in the map and therefore the new element is
+   * not needed.
+   * @param oldElem the element already contained in the map
+   * @param newEleme the new element waiting to be inserted
+   * @return true if oldElem is a more specialized version
+   *         of newElem and therefore newElem can be discarded,
+   *         otherwise false
+   */
+  def elemIncluded(oldElem: Elem, newElem: Elem): Boolean
 
   def add(key: List[A], elem: Elem): Boolean = {
     rules.get(key) match {
       case Some(elemlist) =>
-        if(elemlist exists { elemEqual(_, elem) }) false
+        if(elemlist exists { elemIncluded(_, elem) }) false
         else {
           rules.put(key, elem :: elemlist)
           true
@@ -36,121 +59,163 @@ abstract class AttackSet[A] {
   }
 }
 
-class LhsAttackSet[A] extends AttackSet[A] {
+class LhsAttackRuleMap[A] extends AttackRuleMap[A] {
   type Elem = ( List[A], List[A], Set[List[A]] )
   
-  override def elemEqual(oldElem: Elem, newElem: Elem) = {
+  override def elemIncluded(oldElem: Elem, newElem: Elem) = {
     oldElem._1 == newElem._1 &&
     oldElem._2 == newElem._2 &&
     oldElem._3.subsetOf(newElem._3)
   }
 }
 
-class RhsAttackSet[A] extends AttackSet[A] {
-  type Elem = Set[List[A]]
-
-  override def elemEqual(oldElem: Elem, newElem: Elem) = {
+class RhsAttackRuleMap[A] extends AttackRuleMap[A] {
+  type Elem = Set[A]
+    
+  override def elemIncluded(oldElem: Elem, newElem: Elem) = {
     oldElem.subsetOf(newElem)
   }
 }
 
-class MVPDA[A](val initial: List[A], val rules: Set[AttackRule[A]]) {
+class MVPDA() {
   
-  override def toString = rules.mkString("\n")
-
-  def applyRules() {
-    val lhsRules = new LhsAttackSet[A]()
-    val rhsRules = new RhsAttackSet[A]()
-    val worklist = new scala.collection.mutable.Queue[AttackRule[A]]()
-    worklist ++= rules
-    var refine = true
-    while(worklist.nonEmpty && refine) {
-      val rule = worklist.dequeue
-      println("Dequeued " + rule)
-      if(rule.lhs == initial && rule.rhs.isEmpty) {
-        refine == false
-      }
-      else {
-        var isRhsRule = true
-        for{ lhsRhs <- rule.rhs } {
-          if(lhsRhs.length >= 2) {
-            val lhsRhsHead = lhsRhs.take(2)//(lhsRhs(0), lhsRhs(1))
-            val lhsRhsTail = lhsRhs.drop(2)
-            if(lhsRules.add(lhsRhsHead, (rule.lhs, lhsRhsTail, rule.rhs - lhsRhs))) {
-              println("Added to LHS " + rule)
-              for{ rhsSet <- rhsRules.get(lhsRhsHead) } {
-                val newRhs = (rule.rhs - lhsRhs) | rhsSet
-                val newRule = AttackRule(rule.lhs, newRhs)
-                println("Created from LHS " + newRule)
-                worklist += newRule
-              }
-            }
-          }
-          if(lhsRhs.length >= 3) {
-            isRhsRule = false
-          }
-        }
-        if(isRhsRule) {
-          if(rhsRules.add(rule.lhs, rule.rhs)) {
-            println("Added to RHS " + rule)
-            for{ (lhs, rhsTail, rhsRest) <- lhsRules.get(rule.lhs) } {
-              val newRhs = (rule.rhs map { _ ::: rhsTail }) | rhsRest
-              val newRule = AttackRule(lhs, newRhs)
-              println("Created from RHS " + newRule)
-              worklist += newRule
-            }
-          }
-        }
-      }
-    }
-    if(refine) {
-      println("The states " + initial + " do not refine.\n")
-    }
-    else {
-      println("The states " + initial + " do refine.")
-    }
-  }
 }
 
 object MVPDA {
-
-  def getAttacks[A](mprs: MPRS[A])(implicit ordA: Ordering[A]) = {
-    val states = (mprs.rules flatMap { rule => rule.lhs.head.constants | rule.rhs.head.constants }) | mprs.initialLHS.head.constants | mprs.initialRHS.head.constants
-    val symbols = (mprs.rules flatMap { rule => rule.lhs.tail.constants | rule.rhs.tail.constants }) | mprs.initialLHS.tail.constants | mprs.initialRHS.tail.constants
-    println("States: " + states)
-    println("Symbols: " + symbols)
-    for
-      {state1 <- states
-       state2 <- states
-       symbol1 <- symbols
-       symbol2 <- symbols
-       plhs1 = List(state1, symbol1)
-       plhs2 = List(state2, symbol2)
+  
+  def getAttacksFrom[B](lhs: List[(B, B)], mprs: MPRS[B]) = {
+    val lhsPair = lhs.unzip
+    val lhs1 = lhsPair._1
+    val lhs2 = lhsPair._2
+    for {
        rule1 <- mprs.rules
-       lhs1 = rule1.lhs.toList; action1 = rule1.action; rhs1 = rule1.rhs.toList
-       type1 = rule1.ruleType
-       if lhs1 == plhs1
-      } yield {
-         val rhs2list = for
-         { rule2 <- mprs.rules
-           lhs2 = rule2.lhs.toList; action2 = rule2.action; rhs2 = rule2.rhs.toList
-           type2 = rule1.ruleType
-           if lhs2 == plhs2
-           if type1 == type2
-         } yield rhs2
-         val (lhs3, rhs3) = type1 match {
-           case MayRule => 
-             (plhs1 zip plhs2, (rhs2list map { rhs1 zip _ }).toSet)
-           case MustRule => 
-             (plhs2 zip plhs1, (rhs2list map { _ zip rhs1 }).toSet)
-         }
-         AttackRule(lhs3, rhs3)
+       rule1lhs = rule1.lhs.toList
+       if (rule1.ruleType == MayRule && lhs1 == rule1lhs) ||
+          (rule1.ruleType == MustRule && lhs2 == rule1lhs)
+       rhs1 = rule1.rhs.toList
+    } yield {
+      val rhs2list = for {
+        rule2 <- mprs.rules
+        rule2lhs = rule2.lhs.toList
+        if rule1.ruleType == rule2.ruleType
+        if rule1.action == rule2.action
+        if (rule2.ruleType == MayRule && lhs2 == rule2lhs) ||
+           (rule2.ruleType == MustRule && lhs1 == rule2lhs)
+      } yield rule2.rhs.toList
+      val lhs3 = lhs1 zip lhs2
+      val rhs3 = rule1.ruleType match {
+        case MayRule => (rhs2list map { rhs1 zip _ }).toSet
+        case MustRule => (rhs2list map { _ zip rhs1 }).toSet
+      }
+      AttackRule(lhs3, rhs3)
     }
   }
-
-  def fromMPRS[A](mprs: MPRS[A])(implicit ordA: Ordering[A]) = {
-    val rules = getAttacks(mprs)
+  
+  /**
+   * On the given mPRS, which needs to be a vPDA, test if
+   * the lhs initial state refines the rhs initial state and return
+   * the result.
+   * @param the modal process rewrite system to tested for refinement.
+   *        the system needs to be a visible PDA
+   * @return true if the lhs state of the mPRS refines the rhs state,
+   *         otherwise false
+   */
+  def testRefinement[B](mprs: MPRS[B]): Boolean = {
+    if(!isVPDA(mprs)) {
+      throw new IllegalArgumentException("Given mPRS is not a vPDA")
+    }
+    // encode all states as pairs (lhs, rhs)
+    type A = (B, B)
     val initial = mprs.initialLHS.toList zip mprs.initialRHS.toList
-    new MVPDA(initial, rules)
+    // the set containing all the rules generated
+    val ruleSet = new HashSet[AttackRule[A]]()
+    // the set containing all the states visited
+    val stateSet = new HashSet[List[A]]()
+    // the rules that can be applied from the left hand side
+    val lhsRules = new LhsAttackRuleMap[A]()
+    // the rules that can be applied from the left hand side
+    val rhsRules = new RhsAttackRuleMap[A]()
+    // worklist of rules generated but not yet applied
+    val worklist = new LinkedHashSet[AttackRule[A]]()
+    // adds the rule to the worklist if it was not already added
+    def addRule(rule: AttackRule[A]) {
+      if(!ruleSet.contains(rule)) {
+        if(!worklist.contains(rule)) {
+          worklist += rule
+          //println("Added to worklist " + rule)
+        }
+        ruleSet += rule
+      }
+    }
+    // adds all the basic attack rules from a state if it is new
+    def addRulesFrom(lhs: List[A]) {
+      if(stateSet.add(lhs)) {
+        println("Added new starting state " + lhs)
+        getAttacksFrom(lhs, mprs) foreach { addRule(_) }
+      }
+    }
+    // initialize rules with rules from initial state
+    addRulesFrom(initial)
+    while(worklist.nonEmpty) {
+      // get rule from worklist
+      val rule = worklist.head
+      worklist -= rule
+      // check if winning strategy for attacker is already found
+      if(rule.lhs == initial && rule.rhs.isEmpty) {
+        println("Found winning strategy " + rule)
+        return false
+      }
+      else {
+        var isRhsRule = true
+        // check if one right-hand side is a call or internal and
+        // therefore the rule is a left-hand side rule
+        for{ lhsRhs <- rule.rhs } {
+          if(lhsRhs.length >= 2) {
+            // seperate rule into parts
+            val lhsRhsHead = lhsRhs.take(2)
+            val lhsRhsTail = lhsRhs.drop(2)
+            val lhsRhsRest = rule.rhs - lhsRhs
+            // could have found new reachable state
+            addRulesFrom(lhsRhsHead)
+            // add new left-hand side rule
+            if(lhsRules.add(lhsRhsHead, (rule.lhs, lhsRhsTail, lhsRhsRest))) {
+              // add a combined rule for all combinations with rhs rules
+              for{ rhsSet <- rhsRules.get(lhsRhsHead) } {
+                val newRhs = lhsRhsRest | (rhsSet map { _ :: lhsRhsTail })
+                addRule(AttackRule(rule.lhs, newRhs))
+              }
+            }
+            isRhsRule = false
+          }
+        }
+        // rule only has return righthand sides or none, therefore
+        // it can be applied from the right-hand side
+        if(isRhsRule) {
+          // add new right-hand side rule
+          if(rhsRules.add(rule.lhs, rule.rhs map { _(0) })) {
+            // add a combined rule for all combinations with lhs rules
+            for{ (lhs, rhsTail, rhsRest) <- lhsRules.get(rule.lhs) } {
+              val newRhs = (rule.rhs map { _ ::: rhsTail }) | rhsRest
+              addRule(AttackRule(rule.lhs, newRhs))
+            }
+          }
+        }
+      }
+    }
+    // no winning strategy for attacker found, so the states refine
+    return true
+  }
+  
+  def isVPDA[B](mprs: MPRS[B]) = {
+    val arities = new HashMap[String, Int]()
+    mprs.rules forall { rule => 
+      val (action, arity) = rule match {
+        case RewriteRule(_, _ +: Const(_), a, Const(_)) => (a, 0)
+        case RewriteRule(_, _ +: Const(_), a, _ +: Const(_)) => (a, 1)
+        case RewriteRule(_, _ +: Const(_), a, _ +: _ +: Const(_)) => (a, 2)
+        case _ => ("", -1)
+      }
+      arity >= 0 && (arities.put(action, arity) forall { _ == arity })
+    }
   }
 }

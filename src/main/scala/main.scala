@@ -86,7 +86,8 @@ object Main extends App {
 
   try {
     //val input = getClass.getResource("simple_mprw.xmts")
-    val input = getClass.getResource("vpda.xmts")
+    val input = getClass.getResource("vpda_simple.xmts")
+    //val input = getClass.getResource("vpda_complete.xmts")
     //val input = getClass.getResource("rules_mprw.xmts")
     val lexer = new xMPRSLexer(new ANTLRInputStream((input.openStream())))
     val tokens = new CommonTokenStream(lexer)
@@ -96,16 +97,13 @@ object Main extends App {
     val list = treeToSeq(result)
     val mprs = MPRSParser.fromAST(result)
     println(mprs)
-    if(mprs.isVPDA) {
-      println("As vPDA:")
-      mprs.asVPDA()
-      println("Actions: " + mprs.actions)
-      println("Constants: " + mprs.constants)
-      val vpda = MVPDA.fromMPRS(mprs)
-      println("Attack rules automaton:")
-      println(vpda)
-      println("Calculating fixpoint:")
-      vpda.applyRules()
+    println("Actions: " + mprs.actions)
+    println("Constants: " + mprs.constants)
+    if(MVPDA.testRefinement(mprs)) {
+      println(mprs.initialLHS +" ≤ " + mprs.initialRHS)
+    }
+    else {
+      println("¬(" + mprs.initialLHS +" ≤ " + mprs.initialRHS + ")")
     }
   }
   catch {
