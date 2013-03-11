@@ -32,13 +32,20 @@ abstract class AttackRuleMap[A] {
    * already contained in the map and therefore the new element is
    * not needed.
    * @param oldElem the element already contained in the map
-   * @param newEleme the new element waiting to be inserted
+   * @param newElem the new element waiting to be inserted
    * @return true if oldElem is a more specialized version
    *         of newElem and therefore newElem can be discarded,
    *         otherwise false
    */
   def elemIncluded(oldElem: Elem, newElem: Elem): Boolean
 
+  /**
+   * Adds an element with the given key to the map 
+   * @param key the key state
+   * @param elem the element
+   * @return true if the element was added, false if the same
+   *         or a more specific element 
+   */
   def add(key: List[A], elem: Elem): Boolean = {
     rules.get(key) match {
       case Some(elemlist) =>
@@ -53,12 +60,24 @@ abstract class AttackRuleMap[A] {
     }
   }
   
+  /**
+   * Returns a list of all the elements matching the given key
+   * @param key the key state
+   * @return a list of all the elements matching that key
+   */
   def get(key: List[A]) = rules.get(key) match {
     case Some(elemlist) => elemlist
     case None => Nil
   }
 }
 
+/**
+ * This class represents a map of rules that can be applied
+ * from the left by replacing a state on the right hand side.
+ * The key is the state on the right-hand side and the element
+ * a tuple of (left-hand side, remaining states after the key state,
+ * set of remaining right-hand side rules)
+ */
 class LhsAttackRuleMap[A] extends AttackRuleMap[A] {
   type Elem = ( List[A], List[A], Set[List[A]] )
   
@@ -69,6 +88,13 @@ class LhsAttackRuleMap[A] extends AttackRuleMap[A] {
   }
 }
 
+/**
+ * This class represents a map of rules that can be applied
+ * from the right by replacing a state matching the left-hand side
+ * with the right-hand side.
+ * The key is the state on the left-hand side and the element is
+ * the set of right-hand side states.
+ */
 class RhsAttackRuleMap[A] extends AttackRuleMap[A] {
   type Elem = Set[A]
     
@@ -77,37 +103,45 @@ class RhsAttackRuleMap[A] extends AttackRuleMap[A] {
   }
 }
 
-class MVPDA() {
-  
-}
-
 object MVPDA {
-  
+
+  /**
+   * Get all the attacks that are possible from a state under
+   * the given mPRS.
+   * @param lhs the paired state from which the attack is done
+   * @param mprs the original mPRS with the transition rules
+   * @return a list of AttackRules starting from the given state
+   */ 
   def getAttacksFrom[B](lhs: List[(B, B)], mprs: MPRS[B]) = {
     val lhsPair = lhs.unzip
     val lhs1 = lhsPair._1
     val lhs2 = lhsPair._2
     for {
+       // iterate over all attacking rules
        rule1 <- mprs.rules
        rule1lhs = rule1.lhs.toList
+       // attack from left for may rule and from right for must rule
        if (rule1.ruleType == MayRule && lhs1 == rule1lhs) ||
           (rule1.ruleType == MustRule && lhs2 == rule1lhs)
        rhs1 = rule1.rhs.toList
     } yield {
       val rhs2list = for {
+       // iterate over all defending rules fitting the attack rule
+       rule1 <- mprs.rules
         rule2 <- mprs.rules
         rule2lhs = rule2.lhs.toList
         if rule1.ruleType == rule2.ruleType
         if rule1.action == rule2.action
+       // defend from right for may rule and from left for must rule
         if (rule2.ruleType == MayRule && lhs2 == rule2lhs) ||
            (rule2.ruleType == MustRule && lhs1 == rule2lhs)
       } yield rule2.rhs.toList
-      val lhs3 = lhs1 zip lhs2
+      // create the new right-hand side
       val rhs3 = rule1.ruleType match {
         case MayRule => (rhs2list map { rhs1 zip _ }).toSet
         case MustRule => (rhs2list map { _ zip rhs1 }).toSet
       }
-      AttackRule(lhs3, rhs3)
+      AttackRule(lhs, rhs3)
     }
   }
   
@@ -142,7 +176,6 @@ object MVPDA {
       if(!ruleSet.contains(rule)) {
         if(!worklist.contains(rule)) {
           worklist += rule
-          //println("Added to worklist " + rule)
         }
         ruleSet += rule
       }
@@ -159,6 +192,7 @@ object MVPDA {
     while(worklist.nonEmpty) {
       // get rule from worklist
       val rule = worklist.head
+      println("Got from worklist rule " + rule)
       worklist -= rule
       // check if winning strategy for attacker is already found
       if(rule.lhs == initial && rule.rhs.isEmpty) {
@@ -206,6 +240,14 @@ object MVPDA {
     return true
   }
   
+  /**
+   * Test if the given modal process rewrite system is
+   * a visible PDA. An mPRS is a vPDA if the actions can
+   * be partitioned into three sets for internal, call or
+   * return actions.
+   * @param mprs the mPRS to be tested
+   * @return true if the mPRS is a vPDA, otherwise false
+   */ 
   def isVPDA[B](mprs: MPRS[B]) = {
     val arities = new HashMap[String, Int]()
     mprs.rules forall { rule => 
