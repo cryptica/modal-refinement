@@ -1,0 +1,39 @@
+mprs vpda [
+    initialLHS p.S
+    initialRHS q.S
+
+    p.S i! p.S
+    p.S i! p.R
+    p.R i! p.S
+    p.R i! p.R
+
+    q.S i! q.S
+    q.S i! q.R
+    q.R i! q.S
+    q.R i! q.R
+    
+    p.S c! p.S.S
+    p.S c! p.S.R
+    p.S c! p.R.S
+    p.S c! p.R.R
+    p.R c! p.S.S
+    p.R c! p.S.R
+    p.R c! p.R.S
+    p.R c! p.R.R
+    
+    q.S c! q.S.S
+    q.S c! q.S.R
+    q.S c! q.R.S
+    q.S c! q.R.R
+    q.R c! q.S.S
+    q.R c! q.S.R
+    q.R c! q.R.S
+    q.R c! q.R.R
+    
+    p.S r! p
+    p.R r! p
+    
+    q.S r! q
+    q.R r! q
+]
+

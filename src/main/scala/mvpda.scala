@@ -126,8 +126,7 @@ object MVPDA {
        rhs1 = rule1.rhs.toList
     } yield {
       val rhs2list = for {
-       // iterate over all defending rules fitting the attack rule
-       rule1 <- mprs.rules
+        // iterate over all defending rules fitting the attack rule
         rule2 <- mprs.rules
         rule2lhs = rule2.lhs.toList
         if rule1.ruleType == rule2.ruleType
@@ -226,11 +225,12 @@ object MVPDA {
         // it can be applied from the right-hand side
         if(isRhsRule) {
           // add new right-hand side rule
-          if(rhsRules.add(rule.lhs, rule.rhs map { _(0) })) {
+          val rhsHeads = rule.rhs map { _(0) }
+          if(rhsRules.add(rule.lhs, rhsHeads)) {
             // add a combined rule for all combinations with lhs rules
             for{ (lhs, rhsTail, rhsRest) <- lhsRules.get(rule.lhs) } {
-              val newRhs = (rule.rhs map { _ ::: rhsTail }) | rhsRest
-              addRule(AttackRule(rule.lhs, newRhs))
+              val newRhs = (rhsHeads map { _ :: rhsTail }) | rhsRest
+              addRule(AttackRule(lhs, newRhs))
             }
           }
         }

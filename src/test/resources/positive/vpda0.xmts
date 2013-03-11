@@ -1,0 +1,16 @@
+mprs vpda [
+    initialLHS p.S
+    initialRHS q.S
+
+    p.S a? p.S.T
+    p.S b? p
+    p.T c? p
+
+    q.S a? q.S.R
+    q.S a? q.S.S
+    q.R a? q.S.R
+    q.S b? q
+    q.R b? q
+    q.R c? q
+]
+

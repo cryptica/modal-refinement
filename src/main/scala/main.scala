@@ -1,6 +1,8 @@
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree;
 import java.io.IOException
+import java.io.File
+import java.io.FileInputStream
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
@@ -84,31 +86,44 @@ object Main extends App {
     buffer.toList
   }
 
-  try {
-    //val input = getClass.getResource("simple_mprw.xmts")
-    val input = getClass.getResource("vpda_simple.xmts")
-    //val input = getClass.getResource("vpda_complete.xmts")
-    //val input = getClass.getResource("rules_mprw.xmts")
-    val lexer = new xMPRSLexer(new ANTLRInputStream((input.openStream())))
+  def testFileForRefinement(file: File) = {
+    val input = new FileInputStream(file)
+    val lexer = new xMPRSLexer(new ANTLRInputStream((input)))
     val tokens = new CommonTokenStream(lexer)
     val parser = new xMPRSParser(tokens)
     val mprsTree = parser.mprs
+    input.close()
     val result = mprsTree.tree.asInstanceOf[CommonTree];
     val list = treeToSeq(result)
     val mprs = MPRSParser.fromAST(result)
     println(mprs)
     println("Actions: " + mprs.actions)
     println("Constants: " + mprs.constants)
-    if(MVPDA.testRefinement(mprs)) {
-      println(mprs.initialLHS +" ≤ " + mprs.initialRHS)
+    MVPDA.testRefinement(mprs)
+  }
+
+  try {
+    val file = new File("src/main/resources/vpda_all_complete.xmts")
+    val result = testFileForRefinement(file)
+    if(result) {
+      println(file + " refines")
+      sys.exit(0)
     }
     else {
-      println("¬(" + mprs.initialLHS +" ≤ " + mprs.initialRHS + ")")
+      println(file + " does not refine")
+      sys.exit(1)
     }
   }
   catch {
-    case e: IOException => e.printStackTrace()
-    case e: RecognitionException => e.printStackTrace()
+    case e: IOException =>
+      e.printStackTrace()
+      sys.exit(-1)
+    case e: RecognitionException =>
+      e.printStackTrace()
+      sys.exit(-2)
+    case e: IllegalArgumentException =>
+      e.printStackTrace()
+      sys.exit(-3)
   }
 }
 
