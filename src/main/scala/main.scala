@@ -1,3 +1,4 @@
+
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree;
 import java.io.IOException
@@ -104,6 +105,7 @@ object Main extends App {
 
   try {
     val file = new File("src/main/resources/vpda_all_complete.xmts")
+    //val file = new File("src/test/resources/negative/vpda1.xmts")
     val result = testFileForRefinement(file)
     if(result) {
       println(file + " refines")
