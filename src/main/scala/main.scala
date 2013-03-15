@@ -111,7 +111,7 @@ object Main extends App {
     }
     else {
       println(file + " does not refine")
-      sys.exit(1)
+      sys.exit(0)
     }
   }
   catch {
