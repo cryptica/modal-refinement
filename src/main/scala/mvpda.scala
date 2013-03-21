@@ -34,10 +34,12 @@ case class RhsAttackRule[A](lhs: (A, A), rhsReturn: Set[A]) extends AttackRule[A
 }
 object AttackRule {
   private def partition[A](rhs: Set[List[A]]) = {
-    val (rhsReturnFull, rhsCallInternal) = rhs partition { _.size < 2 }
-    val rhsReturn = rhsReturnFull map { _(0) }
-    val (rhsInternalFull, rhsCallFull) = rhsCallInternal partition { _.size < 3 }
-    val rhsInternal = rhsInternalFull map { rhs => (rhs(0), rhs(1)) }
+    val groups = rhs groupBy { _.size  }
+    val rhsReturnFull = groups.getOrElse(1, Set.empty)
+    val rhsInternalFull = groups.getOrElse(2, Set.empty)
+    val rhsCallFull = groups.getOrElse(3, Set.empty)
+    val rhsReturn = (rhsReturnFull map { _(0) })
+    val rhsInternal = (rhsInternalFull map { rhs => (rhs(0), rhs(1)) })
     var rhsCall = Map[(A, A), Set[A]]()
     rhsCallFull foreach { rhs =>
       val head = (rhs(0), rhs(1))
@@ -68,10 +70,31 @@ object AttackRule {
 
 class RuleOrdering[A] extends Ordering[AttackRule[A]] {
   override def compare(x: AttackRule[A], y: AttackRule[A]) = {
-    y.rhs.size compare x.rhs.size
-    /*val calls = y.rhsReturn.size compare x.rhsReturn.size
-    if(calls != 0) {
-      calls
+    val comp = y.rhs.size compare x.rhs.size
+    if(comp != 0) {
+      comp
+    }
+    else {
+      0
+      // TODO what if hash codes are equal but x != y?
+      /*val hashComp = y.hashCode compare x.hashCode
+      if(hashComp != 0) {
+        hashComp
+      }
+      else {
+        if(x == y) {
+          0
+        }
+        else {
+          throw new RuntimeException("" + x + " and " + y + " have same hash code!")
+        }
+      }*/
+    }
+    //val comp = 0
+    //y.rhsReturn 
+    /*val returns = y.rhsReturn.size compare x.rhsReturn.size
+    if(returns != 0) {
+      returns
     }
     else {
       val internals = y.rhsInternal.size compare x.rhsInternal.size
@@ -79,7 +102,18 @@ class RuleOrdering[A] extends Ordering[AttackRule[A]] {
         internals
       }
       else {
-        y.rhsCall.size compare x.rhsCall.size
+        val calls = y.rhsCall.size compare x.rhsCall.size
+        if(calls != 0) {
+          calls
+        }
+        else {
+          if(x == y) {
+            0
+          }
+          else {
+            1
+          }
+        }
       }
     }*/
     //(y.rhsReturn.size + y.rhsInternal.size + y.rhsCall.size) compare (x.rhsReturn.size + x.rhsInternal.size + x.rhsCall.size)
@@ -90,38 +124,43 @@ class RefinementTester[B](mprs: MPRS[B]) {
   type A = (B, B)
 
   val workingSet = new PriorityQueue[AttackRule[A]]()(new RuleOrdering())
-  //val workingLhs = new HashSet[AttackRule[A]]()
-  //val workingRhs = new HashSet[AttackRule[A]]()
-  //val workingSet = new HashSet[AttackRule[A]]()
-  //val workingSet = new TreeSet[AttackRule[A]]()(Ordering.by(_.rhs.size))
+  //val workingSet = new TreeSet[AttackRule[A]]()(new RuleOrdering())
   val stateSet = new HashSet[(A, A)]()
 
   val allMap = new HashMap[(A, A), Set[AttackRule[A]]]()
   val rhsMap = new HashMap[(A, A), Set[RhsAttackRule[A]]]()
   val lhsMap = new HashMap[(A, A), Set[LhsAttackRule[A]]]()
-
-  def addRulesFrom(lhs: (A, A)) {
-    if(stateSet.add(lhs)) {
-      println("Added new starting state " + lhs)
-      allMap += ((lhs, Set.empty[AttackRule[A]]))
-      rhsMap += ((lhs, Set.empty[RhsAttackRule[A]]))
-      lhsMap += ((lhs, Set.empty[LhsAttackRule[A]]))
-      val attackSet = getAttacksFrom(lhs)
-      attackSet foreach { add(_) }
+  var numRules = 0
+  
+  val arities = new HashMap[String, Int]()
+  def isVPDA[B](mprs: MPRS[B]) = {
+    mprs.rules forall { rule => 
+      val (action, arity) = rule match {
+        case RewriteRule(_, _ +: Const(_), a, Const(_)) => (a, 1)
+        case RewriteRule(_, _ +: Const(_), a, _ +: Const(_)) => (a, 2)
+        case RewriteRule(_, _ +: Const(_), a, _ +: _ +: Const(_)) => (a, 3)
+        case _ => ("", -1)
+      }
+      arity >= 0 && (arities.put(action, arity) forall { _ == arity })
     }
   }
 
-  def delete(rule: AttackRule[A]) {
+  def addRulesFrom(lhs: (A, A)) {
+    if(stateSet.add(lhs)) {
+      allMap += ((lhs, Set.empty[AttackRule[A]]))
+      rhsMap += ((lhs, Set.empty[RhsAttackRule[A]]))
+      lhsMap += ((lhs, Set.empty[LhsAttackRule[A]]))
+      addAttacksFrom(lhs)
+    }
+  }
+
+  def remove(rule: AttackRule[A]) {
     //workingSet -= rule
-    //workingLhs -= rule
-    //workingRhs -= rule
     allMap += ((rule.lhs, allMap(rule.lhs) - rule))
+    numRules -= 1
     rule match {
       case lhsRule @ LhsAttackRule(_,rhsInternal,rhsCall,_) => 
-        rhsInternal foreach { rhs =>
-          lhsMap += ((rhs, lhsMap(rhs) - lhsRule))
-        }
-        rhsCall.keySet foreach { rhs =>
+        (rhsInternal | rhsCall.keySet) foreach { rhs =>
           lhsMap += ((rhs, lhsMap(rhs) - lhsRule))
         }
       case rhsRule @ RhsAttackRule(lhs,_) => 
@@ -142,13 +181,10 @@ class RefinementTester[B](mprs: MPRS[B]) {
   private def addNew(rule: AttackRule[A]) {
     workingSet += rule
     allMap += ((rule.lhs, allMap(rule.lhs) + rule))
+    numRules += 1
     rule match {
       case lhsRule @ LhsAttackRule(_,rhsInternal,rhsCall,_) => 
-        rhsInternal foreach { rhs =>
-          addRulesFrom(rhs)
-          lhsMap += ((rhs, lhsMap(rhs) + lhsRule))
-        }
-        rhsCall.keySet foreach { rhs =>
+        (rhsInternal | rhsCall.keySet) foreach { rhs =>
           addRulesFrom(rhs)
           lhsMap += ((rhs, lhsMap(rhs) + lhsRule))
         }
@@ -157,17 +193,15 @@ class RefinementTester[B](mprs: MPRS[B]) {
     }
   }
 
-  def add(rule: AttackRule[A]): Boolean = {
-    //TODO comment
+  def add(rule: AttackRule[A]) {
     val rules = allMap(rule.lhs)
-    if(rules exists { ruleIncluded(_, rule) }) { //TODO: combine with second part?
-      false
-    }
-    else {
-      val delSet = (rules filter { ruleIncluded(rule, _) })
-      delSet foreach { delete(_) }
+    if(!(rules exists { ruleIncluded(_, rule) })) {
+      rules foreach { oldRule =>
+        if(ruleIncluded(rule, oldRule)) {
+          remove(oldRule)
+        }
+      }
       addNew(rule)
-      true
     }
   }
   
@@ -178,7 +212,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
    * @param mprs the original mPRS with the transition rules
    * @return a list of AttackRules starting from the given state
    */ 
-  def getAttacksFrom(lhs: ((B, B), (B, B))) = {
+  def addAttacksFrom(lhs: ((B, B), (B, B))) {
     val lhs1 = List(lhs._1._1, lhs._2._1)
     val lhs2 = List(lhs._1._2, lhs._2._2)
     for {
@@ -202,33 +236,31 @@ class RefinementTester[B](mprs: MPRS[B]) {
       } yield rule2.rhs.toList
       // create the new right-hand side
       val rhs3 = rule1.ruleType match {
-        case MayRule => (rhs2list map { rhs1 zip _ }).toSet
-        case MustRule => (rhs2list map { _ zip rhs1 }).toSet
+        case MayRule => (rhs2list map { rhs1 zip _ })
+        case MustRule => (rhs2list map { _ zip rhs1 })
       }
-      //println("Made attack " + lhs + " -> " + rhs3)
-      val rule = AttackRule.makeRule(lhs, rhs3)
-      //println("Got attack " + rule)
-      rule
+      add(AttackRule.makeRule(lhs, rhs3))
     }
   }
 
-  def combine(lhsRule: LhsAttackRule[A], rhsRule: RhsAttackRule[A]) = {
+  def combine(lhsRule: LhsAttackRule[A], rhsRule: RhsAttackRule[A]) {
     if(lhsRule.rhsInternal.contains(rhsRule.lhs)) {
       val newRhsInternal = lhsRule.rhsInternal - rhsRule.lhs
       val newRhsReturn = lhsRule.rhsReturn | rhsRule.rhsReturn
-      val rule = AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal, lhsRule.rhsCall)
-      //println("Combined " + lhsRule + " and " + rhsRule + " to " + rule)
-      add(rule)
+      add(AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal, lhsRule.rhsCall))
     }
-    val tail = lhsRule.rhsCall.getOrElse(rhsRule.lhs, Set.empty[A])
-    tail foreach { rhsTail => //TODO optimize
-      val newTail = tail - rhsTail
-      val newRhsCall = if(newTail.isEmpty) lhsRule.rhsCall - rhsRule.lhs
-        else lhsRule.rhsCall + ((rhsRule.lhs, newTail))
-      val newRhsInternal = lhsRule.rhsInternal | (rhsRule.rhsReturn map ( (_, rhsTail) ))
-      val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall)
-      //println("Combined " + lhsRule + " and " + rhsRule + " to " + rule)
-      add(rule)
+    val callTails = lhsRule.rhsCall.getOrElse(rhsRule.lhs, Set.empty)
+    callTails foreach { callTail => //TODO optimize
+      val newCallTails = callTails - callTail
+      val newRhsCall = if(newCallTails.isEmpty) {
+          lhsRule.rhsCall - rhsRule.lhs
+        }
+        else {
+          lhsRule.rhsCall + ((rhsRule.lhs, newCallTails))
+        }
+      val newRhsInternal = lhsRule.rhsInternal |
+          (rhsRule.rhsReturn map ( (_, callTail) ))
+      add(AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall))
     }
   }
   
@@ -242,9 +274,9 @@ class RefinementTester[B](mprs: MPRS[B]) {
    *         otherwise false
    */
   def testRefinement(): Boolean = {
-    /*if(!isVPDA(mprs)) {
+    if(!isVPDA(mprs)) {
       throw new IllegalArgumentException("Given mPRS is not a vPDA")
-    */
+    }
     // encode all states as pairs (lhs, rhs)
     val initialList = mprs.initialLHS.toList zip mprs.initialRHS.toList
     val initial = (initialList(0), initialList(1))
@@ -257,11 +289,8 @@ class RefinementTester[B](mprs: MPRS[B]) {
     while(workingSet.nonEmpty) {
       // get rule from worklist
       counter += 1
-      //val rule = workingSet.firstKey
-      //val curWorkingSet = if(workingRhs.nonEmpty) workingRhs else workingLhs
-      //val rule = curWorkingSet.head
-      //curWorkingSet -= rule
       val rule = workingSet.dequeue
+      //val rule = workingSet.lastKey
       //workingSet -= rule
       val size = rule.rhsReturn.size + rule.rhsInternal.size
       if(size > maxsize) {
@@ -286,9 +315,8 @@ class RefinementTester[B](mprs: MPRS[B]) {
         println("Found winning strategy " + rule)
         return false
       }
-      else if(allMap(rule.lhs) exists { oldrule =>
-        ruleIncluded(oldrule, rule) && !ruleIncluded(rule, oldrule) } ) {
-        //println("Rule already obsolete: " + rule)
+      else if(allMap(rule.lhs) exists { oldRule =>
+        ruleIncluded(oldRule, rule) && !ruleIncluded(rule, oldRule) } ) {
         obsolete += 1
       }
       else {
@@ -307,6 +335,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
       }
     }
     // no winning strategy for attacker found, so the states refine
+    println("Total number of rules is " + numRules)
     println("Number of obsolete rules is " + obsolete)
     return true
   }
