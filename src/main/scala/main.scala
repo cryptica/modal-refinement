@@ -103,9 +103,13 @@ object Main extends App {
     MVPDA.testRefinement(mprs)
   }
 
+  if(args.length < 1) {
+    println("Missing filename as argument!")
+    sys.exit(-3)
+  }
+  val file = new File(args(0))
+  //"src/main/resources/vpda_complete_n2"
   try {
-    val file = new File("src/main/resources/vpda_complete_n2")
-    //val file = new File("src/test/resources/negative/vpda1.xmts")
     val result = testFileForRefinement(file)
     if(result) {
       println(file + " refines")
