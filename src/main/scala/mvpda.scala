@@ -3,6 +3,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.TreeSet
 import scala.collection.mutable.LinkedHashSet
 import scala.collection.mutable.PriorityQueue
+import scala.collection.mutable.Queue
 
 /**
  * This class encodes a single or combined attack moves
@@ -12,25 +13,20 @@ import scala.collection.mutable.PriorityQueue
  */
 abstract sealed class AttackRule[A] {
   val lhs: (A, A)
-  val rhsInternal: Set[(A, A)]
-  val rhsCall: Map[(A, A), Set[A]]
-  val rhsReturn: Set[A]
-  lazy val rhs = (rhsInternal map { rhs => List(rhs._1, rhs._2) }) |
-            (rhsCall flatMap { rhs => rhs._2 map { List(rhs._1._1, rhs._1._2, _) } }).toSet |
-            (rhsReturn map { rhs => List(rhs) })
+  val rhs: Set[List[A]]
   override def toString =
-    lhs.toString + " -> " +
-    rhsInternal.mkString("{",",","}") +
-    rhsReturn.mkString("{",",","}") +
-    (rhsCall map { e => e._1 + e._2.mkString("(",",",")") }).mkString("{",",","}")
+    lhs.toString + " -> " + (rhs map { _.mkString }).mkString("{",",","}")
 }
 case class LhsAttackRule[A](lhs: (A, A), rhsInternal: Set[(A, A)], rhsCall: Map[(A, A), Set[A]], rhsReturn: Set[A]) extends AttackRule[A] {
-  override val hashCode = scala.runtime.ScalaRunTime._hashCode(LhsAttackRule.this)
+  override val hashCode = 41*(41*(41*(41 + lhs.hashCode) + rhsInternal.hashCode) + rhsCall.hashCode) + rhsReturn.hashCode
+  val rhs =
+    (rhsReturn map { rhs => List(rhs) }) |
+    (rhsInternal map { rhs => List(rhs._1, rhs._2) }) |
+    (rhsCall flatMap { rhs => rhs._2 map { List(rhs._1._1, rhs._1._2, _) } }).toSet
 }
 case class RhsAttackRule[A](lhs: (A, A), rhsReturn: Set[A]) extends AttackRule[A] {
-  val rhsInternal = Set.empty[(A, A)]
-  val rhsCall = Map.empty[(A, A), Set[A]]
-  override val hashCode = scala.runtime.ScalaRunTime._hashCode(RhsAttackRule.this)
+  override val hashCode = 31*(31 + lhs.hashCode) + rhsReturn.hashCode
+  val rhs = (rhsReturn map { rhs => List(rhs) })
 }
 object AttackRule {
   private def partition[A](rhs: Set[List[A]]) = {
@@ -44,10 +40,7 @@ object AttackRule {
     rhsCallFull foreach { rhs =>
       val head = (rhs(0), rhs(1))
       val tail = rhs(2)
-      val entry = rhsCall.get(head) match {
-        case Some(list) => list + tail
-        case None => Set(tail)
-      }
+      val entry = rhsCall.getOrElse(head, Set.empty) + tail
       rhsCall += ((head, entry))
     }
     (rhsReturn, rhsInternal, rhsCall)
@@ -70,53 +63,7 @@ object AttackRule {
 
 class RuleOrdering[A] extends Ordering[AttackRule[A]] {
   override def compare(x: AttackRule[A], y: AttackRule[A]) = {
-    val comp = y.rhs.size compare x.rhs.size
-    if(comp != 0) {
-      comp
-    }
-    else {
-      0
-      // TODO what if hash codes are equal but x != y?
-      /*val hashComp = y.hashCode compare x.hashCode
-      if(hashComp != 0) {
-        hashComp
-      }
-      else {
-        if(x == y) {
-          0
-        }
-        else {
-          throw new RuntimeException("" + x + " and " + y + " have same hash code!")
-        }
-      }*/
-    }
-    //val comp = 0
-    //y.rhsReturn 
-    /*val returns = y.rhsReturn.size compare x.rhsReturn.size
-    if(returns != 0) {
-      returns
-    }
-    else {
-      val internals = y.rhsInternal.size compare x.rhsInternal.size
-      if(internals != 0) {
-        internals
-      }
-      else {
-        val calls = y.rhsCall.size compare x.rhsCall.size
-        if(calls != 0) {
-          calls
-        }
-        else {
-          if(x == y) {
-            0
-          }
-          else {
-            1
-          }
-        }
-      }
-    }*/
-    //(y.rhsReturn.size + y.rhsInternal.size + y.rhsCall.size) compare (x.rhsReturn.size + x.rhsInternal.size + x.rhsCall.size)
+    y.rhs.size compare x.rhs.size
   }
 }
 
@@ -124,8 +71,8 @@ class RefinementTester[B](mprs: MPRS[B]) {
   type A = (B, B)
 
   val workingSet = new PriorityQueue[AttackRule[A]]()(new RuleOrdering())
-  //val workingSet = new TreeSet[AttackRule[A]]()(new RuleOrdering())
   val stateSet = new HashSet[(A, A)]()
+  val stateWorkingSet = new Queue[(A, A)]()
 
   val allMap = new HashMap[(A, A), Set[AttackRule[A]]]()
   val rhsMap = new HashMap[(A, A), Set[RhsAttackRule[A]]]()
@@ -147,10 +94,10 @@ class RefinementTester[B](mprs: MPRS[B]) {
 
   def addRulesFrom(lhs: (A, A)) {
     if(stateSet.add(lhs)) {
-      allMap += ((lhs, Set.empty[AttackRule[A]]))
+      /*allMap += ((lhs, Set.empty[AttackRule[A]]))
       rhsMap += ((lhs, Set.empty[RhsAttackRule[A]]))
-      lhsMap += ((lhs, Set.empty[LhsAttackRule[A]]))
-      addAttacksFrom(lhs)
+      lhsMap += ((lhs, Set.empty[LhsAttackRule[A]]))*/
+      stateWorkingSet.enqueue(lhs)
     }
   }
 
@@ -171,30 +118,25 @@ class RefinementTester[B](mprs: MPRS[B]) {
   def ruleIncluded(oldRule: AttackRule[A], newRule: AttackRule[A]) = {
     oldRule.lhs == newRule.lhs &&
     oldRule.rhs.subsetOf(newRule.rhs)
-    /*oldRule.rhsReturn.subsetOf(newRule.rhsReturn) &&
-    oldRule.rhsInternal.subsetOf(newRule.rhsInternal) &&
-    (oldRule.rhsCall forall { entry =>
-      entry._2.subsetOf(newRule.rhsCall.getOrElse(entry._1, Set.empty))
-    })*/
   }
 
   private def addNew(rule: AttackRule[A]) {
     workingSet += rule
-    allMap += ((rule.lhs, allMap(rule.lhs) + rule))
+    allMap += ((rule.lhs, allMap.getOrElse(rule.lhs, Set.empty) + rule))
     numRules += 1
     rule match {
       case lhsRule @ LhsAttackRule(_,rhsInternal,rhsCall,_) => 
         (rhsInternal | rhsCall.keySet) foreach { rhs =>
-          addRulesFrom(rhs)
-          lhsMap += ((rhs, lhsMap(rhs) + lhsRule))
+          addRulesFrom(rhs) // TODO prevent stack overflow
+          lhsMap += ((rhs, lhsMap.getOrElse(rhs, Set.empty) + lhsRule))
         }
       case rhsRule @ RhsAttackRule(lhs,_) => 
-        rhsMap += ((lhs, rhsMap(lhs) + rhsRule))
+        rhsMap += ((lhs, rhsMap.getOrElse(lhs, Set.empty) + rhsRule))
     }
   }
 
   def add(rule: AttackRule[A]) {
-    val rules = allMap(rule.lhs)
+    val rules = allMap.getOrElse(rule.lhs, Set.empty)
     if(!(rules exists { ruleIncluded(_, rule) })) {
       rules foreach { oldRule =>
         if(ruleIncluded(rule, oldRule)) {
@@ -249,18 +191,19 @@ class RefinementTester[B](mprs: MPRS[B]) {
       val newRhsReturn = lhsRule.rhsReturn | rhsRule.rhsReturn
       add(AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal, lhsRule.rhsCall))
     }
-    val callTails = lhsRule.rhsCall.getOrElse(rhsRule.lhs, Set.empty)
-    callTails foreach { callTail => //TODO optimize
-      val newCallTails = callTails - callTail
-      val newRhsCall = if(newCallTails.isEmpty) {
-          lhsRule.rhsCall - rhsRule.lhs
-        }
-        else {
-          lhsRule.rhsCall + ((rhsRule.lhs, newCallTails))
-        }
-      val newRhsInternal = lhsRule.rhsInternal |
-          (rhsRule.rhsReturn map ( (_, callTail) ))
-      add(AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall))
+    lhsRule.rhsCall.get(rhsRule.lhs) foreach { callTails =>
+      callTails foreach { callTail =>
+        val newCallTails = callTails - callTail
+        val newRhsCall = if(newCallTails.isEmpty) {
+            lhsRule.rhsCall - rhsRule.lhs
+          }
+          else {
+            lhsRule.rhsCall + ((rhsRule.lhs, newCallTails))
+          }
+        val newRhsInternal = lhsRule.rhsInternal |
+            (rhsRule.rhsReturn map { (_, callTail) })
+        add(AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall))
+      }
     }
   }
   
@@ -284,34 +227,24 @@ class RefinementTester[B](mprs: MPRS[B]) {
     addRulesFrom(initial)
     var counter = 0
     var obsolete = 0
-    var maxsize = 0
-    var prevtime = 0L
-    while(workingSet.nonEmpty) {
+    while(workingSet.nonEmpty || stateWorkingSet.nonEmpty) {
+      while(stateWorkingSet.nonEmpty) {
+        val lhs = stateWorkingSet.dequeue
+        addAttacksFrom(lhs)
+      }
       // get rule from worklist
       counter += 1
       val rule = workingSet.dequeue
-      //val rule = workingSet.lastKey
-      //workingSet -= rule
-      val size = rule.rhsReturn.size + rule.rhsInternal.size
-      if(size > maxsize) {
-        maxsize = size
-        println("Max size of rhs is " + maxsize)
-      }
-      if((counter < 10) || (counter < 100 && counter % 10 == 0) || (counter < 1000 && counter % 100 == 0) || counter % 1000 == 0) {
+      if((counter < 50) || (counter < 100 && counter % 10 == 0) || (counter < 1000 && counter % 100 == 0) || counter % 1000 == 0) {
         println("Got from worklist rule num " + counter)
-        //println("All rules: " + allMap)
-        //println("Rhs rules: " + rhsMap)
-        //println("Lhs rules: " + lhsMap)
         println("Num of all rules: " + ((0, 0) /: allMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
         println("Num of rhs rules: " + ((0, 0) /: rhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
         println("Num of lhs rules: " + ((0, 0) /: lhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        println("Max size of rhs is " + maxsize)
         println("Number of obsolete rules is " + obsolete)
         println("Cur rule is " + rule)
       }
       // check if winning strategy for attacker is already found
-      if(rule.lhs == initial && rule.rhsInternal.isEmpty &&
-         rule.rhsReturn.isEmpty && rule.rhsCall.isEmpty) {
+      if(rule.lhs == initial && rule.rhs.isEmpty) {
         println("Found winning strategy " + rule)
         return false
       }
