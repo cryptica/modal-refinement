@@ -93,9 +93,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
 
   def addRulesFrom(lhs: (A, A)) {
     if(stateSet.add(lhs)) {
-      allMap += ((lhs, Set.empty))
-      rhsMap += ((lhs, Set.empty))
-      lhsMap += ((lhs, Set.empty))
+      println("New lhs " + lhs)
       addAttacksFrom(lhs)
     }
   }
@@ -180,7 +178,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
         case MustRule => (rhs2list map { _ zip rhs1 })
       }
       val rule = AttackRule.makeRule(lhs, rhs3)
-      println("Created rule " + rule)
+      println("Created rule " + rule + " from " + rule1)
       add(rule)
     }
   }
@@ -236,11 +234,11 @@ class RefinementTester[B](mprs: MPRS[B]) {
       counter += 1
       val rule = workingSet.dequeue
       if((counter < 50) || (counter < 100 && counter % 10 == 0) || (counter < 1000 && counter % 100 == 0) || counter % 1000 == 0) {
-        println("Got from worklist rule num " + counter)
-        println("Num of all rules: " + ((0, 0) /: allMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        println("Num of rhs rules: " + ((0, 0) /: rhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        println("Num of lhs rules: " + ((0, 0) /: lhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        println("Number of obsolete rules is " + obsolete)
+        //println("Got from worklist rule num " + counter)
+        //println("Num of all rules: " + ((0, 0) /: allMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
+        //println("Num of rhs rules: " + ((0, 0) /: rhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
+        //println("Num of lhs rules: " + ((0, 0) /: lhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
+        //println("Number of obsolete rules is " + obsolete)
         println("Cur rule is " + rule)
       }
       // check if winning strategy for attacker is already found
@@ -257,12 +255,12 @@ class RefinementTester[B](mprs: MPRS[B]) {
           case lhsRule @ LhsAttackRule(_,rhsInternal,rhsCall,_) =>
             for{ lhsRhs <- (rhsInternal | rhsCall.keySet) } {
               addRulesFrom(lhsRhs)
-              for{ rhsRule <- rhsMap(lhsRhs) } {
+              for{ rhsRule <- rhsMap.getOrElse(lhsRhs, Set.empty) } {
                 combine(lhsRule, rhsRule)
               }
             }
           case rhsRule @ RhsAttackRule(lhs,_) =>
-            for{ lhsRule <- lhsMap(lhs) } {
+            for{ lhsRule <- lhsMap.getOrElse(lhs, Set.empty) } {
               combine(lhsRule, rhsRule)
             }
         }
