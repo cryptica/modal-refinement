@@ -72,7 +72,6 @@ class RefinementTester[B](mprs: MPRS[B]) {
 
   val workingSet = new PriorityQueue[AttackRule[A]]()(new RuleOrdering())
   val stateSet = new HashSet[(A, A)]()
-  val stateWorkingSet = new Queue[(A, A)]()
 
   val allMap = new HashMap[(A, A), Set[AttackRule[A]]]()
   val rhsMap = new HashMap[(A, A), Set[RhsAttackRule[A]]]()
@@ -94,10 +93,10 @@ class RefinementTester[B](mprs: MPRS[B]) {
 
   def addRulesFrom(lhs: (A, A)) {
     if(stateSet.add(lhs)) {
-      /*allMap += ((lhs, Set.empty[AttackRule[A]]))
-      rhsMap += ((lhs, Set.empty[RhsAttackRule[A]]))
-      lhsMap += ((lhs, Set.empty[LhsAttackRule[A]]))*/
-      stateWorkingSet.enqueue(lhs)
+      allMap += ((lhs, Set.empty))
+      rhsMap += ((lhs, Set.empty))
+      lhsMap += ((lhs, Set.empty))
+      addAttacksFrom(lhs)
     }
   }
 
@@ -127,7 +126,6 @@ class RefinementTester[B](mprs: MPRS[B]) {
     rule match {
       case lhsRule @ LhsAttackRule(_,rhsInternal,rhsCall,_) => 
         (rhsInternal | rhsCall.keySet) foreach { rhs =>
-          addRulesFrom(rhs) // TODO prevent stack overflow
           lhsMap += ((rhs, lhsMap.getOrElse(rhs, Set.empty) + lhsRule))
         }
       case rhsRule @ RhsAttackRule(lhs,_) => 
@@ -181,7 +179,9 @@ class RefinementTester[B](mprs: MPRS[B]) {
         case MayRule => (rhs2list map { rhs1 zip _ })
         case MustRule => (rhs2list map { _ zip rhs1 })
       }
-      add(AttackRule.makeRule(lhs, rhs3))
+      val rule = AttackRule.makeRule(lhs, rhs3)
+      println("Created rule " + rule)
+      add(rule)
     }
   }
 
@@ -189,7 +189,9 @@ class RefinementTester[B](mprs: MPRS[B]) {
     if(lhsRule.rhsInternal.contains(rhsRule.lhs)) {
       val newRhsInternal = lhsRule.rhsInternal - rhsRule.lhs
       val newRhsReturn = lhsRule.rhsReturn | rhsRule.rhsReturn
-      add(AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal, lhsRule.rhsCall))
+      val rule = AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal, lhsRule.rhsCall)
+      println("Combined rule " + rule)
+      add(rule)
     }
     lhsRule.rhsCall.get(rhsRule.lhs) foreach { callTails =>
       callTails foreach { callTail =>
@@ -202,7 +204,9 @@ class RefinementTester[B](mprs: MPRS[B]) {
           }
         val newRhsInternal = lhsRule.rhsInternal |
             (rhsRule.rhsReturn map { (_, callTail) })
-        add(AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall))
+        val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall)
+        println("Combined rule " + rule)
+        add(rule)
       }
     }
   }
@@ -227,11 +231,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
     addRulesFrom(initial)
     var counter = 0
     var obsolete = 0
-    while(workingSet.nonEmpty || stateWorkingSet.nonEmpty) {
-      while(stateWorkingSet.nonEmpty) {
-        val lhs = stateWorkingSet.dequeue
-        addAttacksFrom(lhs)
-      }
+    while(workingSet.nonEmpty) {
       // get rule from worklist
       counter += 1
       val rule = workingSet.dequeue
@@ -256,6 +256,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
         rule match {
           case lhsRule @ LhsAttackRule(_,rhsInternal,rhsCall,_) =>
             for{ lhsRhs <- (rhsInternal | rhsCall.keySet) } {
+              addRulesFrom(lhsRhs)
               for{ rhsRule <- rhsMap(lhsRhs) } {
                 combine(lhsRule, rhsRule)
               }
