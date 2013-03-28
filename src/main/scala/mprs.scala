@@ -14,7 +14,7 @@ sealed abstract class Process[A] {
   def isEmpty: Boolean
   def head: Process[A]
   def tail: Process[A]
-  def apply(idx: Int): Process[A]
+  def apply(idx: Int): A
   def toList: List[A]
 
   def +:(p: Process[A]): Process[A] = {
@@ -78,7 +78,7 @@ case class Const[A](id: A) extends Process[A] {
   override def constants = Set(id)
   override def head = this
   override def tail = Empty()
-  override def apply(idx: Int) = if(idx == 0) this else throw new IndexOutOfBoundsException(idx.toString)
+  override def apply(idx: Int) = if(idx == 0) id else throw new IndexOutOfBoundsException(idx.toString)
   override def toList = List(id)
 }
 case class |:[A](override val head: Process[A], override val tail: Process[A]) extends ComposedProcess[A] {
@@ -93,7 +93,7 @@ sealed abstract trait ComposedProcess[A] extends Process[A] {
   override def size = head.size + tail.size + 1
   override def length = 1 + tail.length
   override def isEmpty = false
-  override def apply(idx: Int) = if(idx == 0) head else tail(idx - 1)
+  override def apply(idx: Int) = if(idx == 0) head(idx) else tail(idx - 1)
   override def toList = head.toList ::: tail.toList
 }
 
