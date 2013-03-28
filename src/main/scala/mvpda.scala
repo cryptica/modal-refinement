@@ -178,7 +178,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
         case MustRule => (rhs2list map { _ zip rhs1 })
       }
       val rule = AttackRule.makeRule(lhs, rhs3)
-      println("Created rule " + rule + " from " + rule1)
+      //println("Created rule " + rule + " from " + rule1)
       add(rule)
     }
   }
@@ -188,7 +188,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
       val newRhsInternal = lhsRule.rhsInternal - rhsRule.lhs
       val newRhsReturn = lhsRule.rhsReturn | rhsRule.rhsReturn
       val rule = AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal, lhsRule.rhsCall)
-      println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
+      //println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
       add(rule)
     }
     lhsRule.rhsCall.get(rhsRule.lhs) foreach { callTails =>
@@ -203,7 +203,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
         val newRhsInternal = lhsRule.rhsInternal |
             (rhsRule.rhsReturn map { (_, callTail) })
         val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall)
-        println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
+        //println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
         add(rule)
       }
     }
