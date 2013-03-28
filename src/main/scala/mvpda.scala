@@ -15,22 +15,21 @@ abstract sealed class AttackRule[B] {
   val lhs: ((B, B), (B, B))
   val rhs: Set[(List[B], List[B])]
   val size: Int
-  override def toString = lhs.toString + rhs.mkString("{",",","}")
-/*    lhs.toString + " -> " + (rhs map { r => "(" + r._1.mkString(".") + "," + r._2.mkString(".") + ")" }).mkString("{",",","}")*/
+  override def toString =
+    lhs.toString + " -> " + (rhs map { r => "(" + r._1.mkString(".") + "," + r._2.mkString(".") + ")" }).mkString("{",",","}")
 }
 case class LhsAttackRule[B](lhs: ((B, B), (B, B)), rhsInternal: Set[((B, B), (B, B))], rhsCall: Map[((B, B), (B, B)), Set[(B, B)]], rhsReturn: Set[(B, B)]) extends AttackRule[B] {
   override val hashCode = 41*(41*(41*(41 + lhs.hashCode) + rhsInternal.hashCode) + rhsCall.hashCode) + rhsReturn.hashCode
   val size = rhsInternal.size + rhsCall.size + (rhsCall.values map (_.size)).sum
-  //val rhs = Set[Any]() ++ rhsReturn ++ rhsInternal ++ (rhsCall flatMap { rhs => rhs._2 map { (rhs._1, _) } } )
-  val rhs = (rhsReturn map { rhs => (List(rhs._1), List(rhs._2)) }) |
+  val callComplete = (rhsCall flatMap { rhs => rhs._2 map { r => (((rhs._1._1._1, rhs._1._1._2), r._1), ((rhs._1._2._1, rhs._1._2._2), r._2)) } }).toSet
+  lazy val rhs = (rhsReturn map { rhs => (List(rhs._1), List(rhs._2)) }) |
     (rhsInternal map { rhs => (List(rhs._1._1, rhs._1._2), List(rhs._2._1, rhs._2._2)) }) |
     (rhsCall flatMap { rhs => rhs._2 map { r => (List(rhs._1._1._1, rhs._1._1._2, r._1), List(rhs._1._2._1, rhs._1._2._2, r._2)) } }).toSet
 }
 case class RhsAttackRule[B](lhs: ((B, B), (B, B)), rhsReturn: Set[(B, B)]) extends AttackRule[B] {
   override val hashCode = 31*(31 + lhs.hashCode) + rhsReturn.hashCode
   val size = rhsReturn.size
-  //val rhs = Set[Any]() ++ rhsReturn
-  val rhs = (rhsReturn map { rhs => (List(rhs._1), List(rhs._2)) })
+  lazy val rhs = (rhsReturn map { rhs => (List(rhs._1), List(rhs._2)) })
 }
 object AttackRule {
   private def partition[B](rhs: Set[(List[B], List[B])]) = {
@@ -65,21 +64,14 @@ object AttackRule {
   }
 }
 
-class RuleOrdering[B] extends Ordering[AttackRule[B]] {
-  override def compare(x: AttackRule[B], y: AttackRule[B]) = {
-    y.size compare x.size
-  }
-}
-
 class RefinementTester[B](mprs: MPRS[B]) {
-  type A = (B, B)
 
-  val workingSet = new PriorityQueue[AttackRule[B]]()(new RuleOrdering())
+  val workingSet = new PriorityQueue[AttackRule[B]]()(Ordering.by{ rule => -(rule.size) })
   val stateSet = new HashSet[((B, B), (B, B))]()
 
-  val allMap = new HashMap[(A, A), Set[AttackRule[B]]]()
-  val rhsMap = new HashMap[(A, A), Set[RhsAttackRule[B]]]()
-  val lhsMap = new HashMap[(A, A), Set[LhsAttackRule[B]]]()
+  val allMap = new HashMap[((B, B), (B, B)), Set[AttackRule[B]]]()
+  val rhsMap = new HashMap[((B, B), (B, B)), Set[RhsAttackRule[B]]]()
+  val lhsMap = new HashMap[((B, B), (B, B)), Set[LhsAttackRule[B]]]()
   var numRules = 0
   
   val arities = new HashMap[String, Int]()
@@ -95,7 +87,7 @@ class RefinementTester[B](mprs: MPRS[B]) {
     }
   }
 
-  def addRulesFrom(lhs: (A, A)) {
+  def addRulesFrom(lhs: ((B, B), (B, B))) {
     if(stateSet.add(lhs)) {
       println("New lhs " + lhs)
       addAttacksFrom(lhs)
@@ -117,19 +109,18 @@ class RefinementTester[B](mprs: MPRS[B]) {
   }
 
   def ruleIncluded(oldRule: AttackRule[B], newRule: AttackRule[B]) = {
-    /*oldRule.lhs == newRule.lhs &&
+    oldRule.lhs == newRule.lhs &&
     ((oldRule, newRule) match {
-      case (LhsAttackRule(_,s1,s2,s3), LhsAttackRule(_,t1,t2,t3)) =>
+      case (lhs1 @ LhsAttackRule(_,s1,s2,s3), lhs2 @ LhsAttackRule(_,t1,t2,t3)) =>
         s1.subsetOf(t1) && s3.subsetOf(t3) &&
-        (s2 forall { kv => kv._2.subsetOf(t2.getOrElse(kv._1, Set.empty)) })
+        lhs1.callComplete.subsetOf(lhs2.callComplete)
+        //(s2 forall { kv => kv._2.subsetOf(t2.getOrElse(kv._1, Set.empty)) })
       case (RhsAttackRule(_,s3), LhsAttackRule(_,_,_,t3)) =>
         s3.subsetOf(t3)
       case (RhsAttackRule(_,s3), RhsAttackRule(_,t3)) =>
         s3.subsetOf(t3)
       case _ => false
-    })*/
-    oldRule.lhs == newRule.lhs &&
-    oldRule.rhs.subsetOf(newRule.rhs)
+    })
   }
 
   private def addNew(rule: AttackRule[B]) {
