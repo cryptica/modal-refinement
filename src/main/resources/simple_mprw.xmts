@@ -1,5 +1,5 @@
 mprs mprs123 [
-    initial s1
+    s1 <= s1
 
     s1 a! _
     s1 b? _.s2

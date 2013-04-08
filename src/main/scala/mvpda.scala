@@ -93,7 +93,7 @@ class RefinementTester[A] {
     (mprs.initialLeft, mprs.initialRight) match {
       case (Const(p1) +: Const(p2), Const(q1) +: Const(q2)) =>
         val initial = ((p1, p2), (q1, q2))
-        addRulesFrom(initial)
+        // TODO: really return here?
         initial
       case _ =>
         throw new IllegalArgumentException("Given mPRS is not a vPDA")
@@ -102,7 +102,7 @@ class RefinementTester[A] {
 
   def addRulesFrom(lhs: ((A, A), (A, A))) {
     if(stateSet.add(lhs)) {
-      println("New lhs " + lhs)
+      //println("New lhs " + lhs)
       addAttacksFrom(lhs)
     }
   }
@@ -157,6 +157,13 @@ class RefinementTester[A] {
   def add(rule: AttackRule[A]) {
     val rules = allMap.getOrElse(rule.lhs, Set.empty)
     if(!(rules exists { ruleIncluded(_, rule) })) {
+      rule match {
+        case lhsRule @ LhsAttackRule(_,_,rhsInternal,rhsCall) => 
+          (rhsInternal | rhsCall.keySet) foreach { rhs =>
+            addRulesFrom(rhs) // TODO cleaner
+          }
+        case _ =>
+      }
       workingSet += rule
     }
   }
@@ -240,8 +247,15 @@ class RefinementTester[A] {
    */
   def testRefinement(mprs: MPRS[A]): Boolean = {
     val initial = makeVPDA(mprs)
+    addRulesFrom(initial)
     var counter = 0
     var obsolete = 0
+    if(workingSet.nonEmpty) {
+      if(workingSet.head.size > 0) {
+        println("no non-refining states found")
+        return true
+      }
+    }
     while(workingSet.nonEmpty) {
       // get rule from worklist
       counter += 1
@@ -252,18 +266,17 @@ class RefinementTester[A] {
         //println("Num of rhs rules: " + ((0, 0) /: rhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
         //println("Num of lhs rules: " + ((0, 0) /: lhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
         //println("Number of obsolete rules is " + obsolete)
-        println("Cur rule num " + counter + "; total number of rules " + numRules + "; number of obsolete rules " + obsolete)
+        //println("Cur rule num " + counter + "; total number of rules " + numRules + "; number of obsolete rules " + obsolete)
       }
       // check if winning strategy for attacker has been found
       if(rule.lhs == initial && rule.size == 0) {
-        println("Found winning strategy " + rule)
+        //println("Found winning strategy " + rule)
         return false
       }
       else if(addNewRule(rule)) {
         rule match {
           case lhsRule @ LhsAttackRule(_,_,rhsInternal,rhsCall) =>
             for{ lhsRhs <- (rhsInternal | rhsCall.keySet) } {
-              addRulesFrom(lhsRhs)
               for{ rhsRule <- rhsMap.getOrElse(lhsRhs, Set.empty) } {
                 combine(lhsRule, rhsRule)
               }
@@ -279,8 +292,8 @@ class RefinementTester[A] {
       }
     }
     // no winning strategy for attacker found, so the states refine
-    println("Total number of rules is " + numRules)
-    println("Number of obsolete rules is " + obsolete)
+    //println("Total number of rules is " + numRules)
+    //println("Number of obsolete rules is " + obsolete)
     return true
   }
 }

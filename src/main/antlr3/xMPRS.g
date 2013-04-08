@@ -4,16 +4,16 @@ options {
     output=AST; 
 }
 
-/*------------------------------------------------------------------
+/*
  * LEXER RULES
- *------------------------------------------------------------------*/
+ */
 
 tokens {
+    /* mPRS */  
+
     MPRS='mprs';
 
-    /* Options */
-
-    REFINES  ='<=';
+    REFINES='<=';
 
     /* Process */
 
@@ -45,12 +45,30 @@ tokens {
     EXCLAMATION='!';
 }
 
+/*
+ * ERROR HANDLING
+ */
+
+@parser::members {
+  @Override
+  public void reportError(RecognitionException e) {
+    throw new IllegalTokenException(e);
+  }
+}
+
+@lexer::members {
+  @Override
+  public void reportError(RecognitionException e) {
+    throw new IllegalTokenException(e);
+  }
+}
+
 ID          : ('a'..'z'|'A'..'Z')('a'..'z'|'A'..'Z'|'0'..'9')*;
 WS          : (' '|'\n'|'\t'|'\r')+ { $channel = HIDDEN; };
 
-/*------------------------------------------------------------------
+/*
  * PARSER RULES
- *------------------------------------------------------------------*/
+ */
 
 mprs        : MPRS ID (OB process REFINES process rule* CB)? -> ^(MPRS[$ID] process process rule*);
 

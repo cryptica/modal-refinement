@@ -1,13 +1,17 @@
-
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree;
+
 import java.io.IOException
 import java.io.File
 import java.io.FileInputStream
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
-case class IllegalTokenException(errorMsg: String) extends RuntimeException(errorMsg)
+class IllegalTokenException(message: String, cause: Throwable)
+    extends RuntimeException(message, cause) {
+  def this(message: String) = this(message, null)
+  def this(cause: Throwable) = this(cause.toString, cause)
+}
 
 object MPRSParser {
   private def getChildren(ast: CommonTree) = {
@@ -64,7 +68,7 @@ object MPRSParser {
       new MPRS(initialLeft, initialRight, rules.toSet)
     }
     else {
-      throw new IllegalTokenException("Expected a mPRS, got " + tokenType)
+      throw new IllegalTokenException("Expected an mPRS, got " + tokenType)
     }
   }
 }
@@ -87,47 +91,34 @@ object Main extends App {
     buffer.toList
   }
 
-  def testFileForRefinement(file: File) = {
-    val input = new FileInputStream(file)
+  def testFileForRefinement(filename: String) = {
+    val input = new FileInputStream(new File(filename))
     val lexer = new xMPRSLexer(new ANTLRInputStream((input)))
     val tokens = new CommonTokenStream(lexer)
     val parser = new xMPRSParser(tokens)
     val mprsTree = parser.mprs
     input.close()
     val result = mprsTree.tree.asInstanceOf[CommonTree];
-    val list = treeToSeq(result)
     val mprs = MPRSParser.fromAST(result)
-    println(mprs)
+    //println(mprs)
     MVPDA.testRefinement(mprs)
   }
 
-  if(args.length < 1) {
-    println("Missing filename as argument!")
-    sys.exit(1)
-  }
-  val file = new File(args(0))
-  //"src/main/resources/vpda_complete_n2"
-  try {
-    val result = testFileForRefinement(file)
-    if(result) {
-      println("[1]" + file + " (refines)")
-      sys.exit(0)
+  for(file <- args) {
+    try {
+      val t0 = System.nanoTime()
+      val result = testFileForRefinement(file)
+      val t1 = System.nanoTime()
+      val code = if(result) "y" else "n"
+      val time = (t1 - t0) / 1e9
+      println("[" + code + "] " + file + " (" + time + " s)")
     }
-    else {
-      println("[0]" + file + " (does not refine)")
-      sys.exit(0)
+    catch {
+      case e: IllegalArgumentException =>
+      case e: IllegalTokenException =>
+      case e: IOException =>
+        println("[e] " + file + " (" + e + ")")
     }
-  }
-  catch {
-    case e: IOException =>
-      e.printStackTrace()
-      sys.exit(2)
-    case e: RecognitionException =>
-      e.printStackTrace()
-      sys.exit(3)
-    case e: IllegalArgumentException =>
-      e.printStackTrace()
-      sys.exit(4)
   }
 }
 
