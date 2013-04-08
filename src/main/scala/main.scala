@@ -91,8 +91,8 @@ object Main extends App {
     buffer.toList
   }
 
-  def testFileForRefinement(filename: String) = {
-    val input = new FileInputStream(new File(filename))
+  def testFileForRefinement(file: File) = {
+    val input = new FileInputStream(file)
     val lexer = new xMPRSLexer(new ANTLRInputStream((input)))
     val tokens = new CommonTokenStream(lexer)
     val parser = new xMPRSParser(tokens)
@@ -101,23 +101,25 @@ object Main extends App {
     val result = mprsTree.tree.asInstanceOf[CommonTree];
     val mprs = MPRSParser.fromAST(result)
     //println(mprs)
-    MVPDA.testRefinement(mprs)
+    val tester = new RefinementTester(mprs)
+    tester.testRefinement()
   }
 
-  for(file <- args) {
+  for(filename <- args) {
     try {
+      val file = new File(filename)
       val t0 = System.nanoTime()
       val result = testFileForRefinement(file)
       val t1 = System.nanoTime()
       val code = if(result) "y" else "n"
       val time = (t1 - t0) / 1e9
-      println("[" + code + "] " + file + " (" + time + " s)")
+      println("[" + code + "] " + filename + " (" + time + " s)")
     }
     catch {
-      case e: IllegalArgumentException =>
-      case e: IllegalTokenException =>
-      case e: IOException =>
-        println("[e] " + file + " (" + e + ")")
+      case e @ ( _: IllegalArgumentException
+               | _: IllegalTokenException
+               | _: IOException) =>
+        println("[e] " + filename + " (" + e + ")")
     }
   }
 }
