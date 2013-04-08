@@ -13,8 +13,7 @@ tokens {
 
     /* Options */
 
-    INITIAL_LHS='initialLHS';
-    INITIAL_RHS='initialRHS';
+    REFINES  ='<=';
 
     /* Process */
 
@@ -47,15 +46,13 @@ tokens {
 }
 
 ID          : ('a'..'z'|'A'..'Z')('a'..'z'|'A'..'Z'|'0'..'9')*;
-STRING      : '"' (options {greedy=false;}: . )* '"';
 WS          : (' '|'\n'|'\t'|'\r')+ { $channel = HIDDEN; };
 
 /*------------------------------------------------------------------
  * PARSER RULES
  *------------------------------------------------------------------*/
 
-mprs        : MPRS ID (OB INITIAL_LHS process INITIAL_RHS process rule* CB)? -> ^(MPRS[$ID] process process rule*);
-
+mprs        : MPRS ID (OB process REFINES process rule* CB)? -> ^(MPRS[$ID] process process rule*);
 
 /* Process */
 

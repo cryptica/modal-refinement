@@ -58,10 +58,10 @@ object MPRSParser {
     val tokenType = token.getType
     if(tokenType == xMPRSParser.MPRS) {
       val children = getChildren(ast)
-      val initialLHS = makeProcess(children(0))
-      val initialRHS = makeProcess(children(1))
+      val initialLeft = makeProcess(children(0))
+      val initialRight = makeProcess(children(1))
       val rules = (children.drop(2) map { makeRule(_) }).flatten
-      new MPRS(initialLHS, initialRHS, rules.toSet)
+      new MPRS(initialLeft, initialRight, rules.toSet)
     }
     else {
       throw new IllegalTokenException("Expected a mPRS, got " + tokenType)
@@ -98,38 +98,36 @@ object Main extends App {
     val list = treeToSeq(result)
     val mprs = MPRSParser.fromAST(result)
     println(mprs)
-    println("Actions: " + mprs.actions)
-    println("Constants: " + mprs.constants)
     MVPDA.testRefinement(mprs)
   }
 
   if(args.length < 1) {
     println("Missing filename as argument!")
-    sys.exit(-3)
+    sys.exit(1)
   }
   val file = new File(args(0))
   //"src/main/resources/vpda_complete_n2"
   try {
     val result = testFileForRefinement(file)
     if(result) {
-      println(file + " refines")
+      println("[1]" + file + " (refines)")
       sys.exit(0)
     }
     else {
-      println(file + " does not refine")
+      println("[0]" + file + " (does not refine)")
       sys.exit(0)
     }
   }
   catch {
     case e: IOException =>
       e.printStackTrace()
-      sys.exit(-1)
+      sys.exit(2)
     case e: RecognitionException =>
       e.printStackTrace()
-      sys.exit(-2)
+      sys.exit(3)
     case e: IllegalArgumentException =>
       e.printStackTrace()
-      sys.exit(-3)
+      sys.exit(4)
   }
 }
 

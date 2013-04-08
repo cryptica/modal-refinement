@@ -1,6 +1,5 @@
 mprs vpda [
-    initialLHS p.S
-    initialRHS q.S
+    p.S <= q.S
 
     r.S r? r
     p.S c? r.S.S

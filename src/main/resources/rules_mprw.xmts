@@ -1,5 +1,4 @@
 mprs rules [
-    initial r
 
     r a! a
     r b! b

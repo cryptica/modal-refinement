@@ -8,93 +8,43 @@
  * t_1 to t_n are process terms.
 **/
 sealed abstract class Process[A] {
-  def constants: Set[A]
-  def size: Int
-  def length: Int
-  def isEmpty: Boolean
   def head: Process[A]
   def tail: Process[A]
-  def apply(idx: Int): A
-  def toList: List[A]
-
-  def +:(p: Process[A]): Process[A] = {
-    (p, this) match {
-      case (Empty(), _) => this
-      case (_, Empty()) => p
-      case (head +: tail, _) => new +:(head, tail +: this)
-      case _ => new +:(p, this)
-    }
-  }
-
-  def |:(p: Process[A])(implicit ord: Ordering[Process[A]]): Process[A] =
-    (p, this) match {
-      case (Empty(), _) => this
-      case (_, Empty()) => p
-      case (head |: tail, _) =>
-        new |:(head, tail |: this)
-      case (_, head |: tail) => if (ord.compare(p, head) > 0)
-        new |:(head, p |: tail) else new |:(p, this)
-      case _ => if(ord.compare(p, this) > 0)
-        new |:(this, p) else new |:(p, this)
-    }
-
-  def zip[B](p: Process[B])(implicit ordA: Ordering[A], ordB: Ordering[B]): Process[(A,B)] = (this, p) match {
-    case (Empty(), Empty()) => Empty()
-    case (Empty(), _) | (Empty(), _) => throw new IllegalArgumentException("processes of unequal length")
-    case (Const(x), Const(y)) => Const((x, y))
-    case (x +: xs, y +: ys) => (x zip y) +: (xs zip ys)
-    case (x |: xs, y |: ys) => (x zip y) |: (xs zip ys)
-    case _ => throw new IllegalArgumentException("processes of unequal type")
-  }
   
-  def replace(term: Process[A], replacement: Set[Process[A]])(implicit ord: Ordering[A]): Set[Process[A]] = (term, this) match {
-    case (Empty(), _) => throw new IllegalArgumentException("match from empty left hand side")
-    case (x, y) if x == y => replacement
-    case (x +: xs, y +: ys) if x == y => ys.replace(xs, replacement)
-    case (x, y +: ys) => y.replace(x, replacement) map {_ +: ys}
-    case (x |: xs, y |: ys) if x == y => ys.replace(xs, replacement)
-    case (x, y |: ys) => (y.replace(x, replacement) map { _ |: ys }) |
-    (ys.replace(x, replacement) map { y |: _ })
-    case _ => Set(this)
+  def +:(p: Process[A]): Process[A] = (p, this) match {
+    case (Empty(), _) => this
+    case (_, Empty()) => p
+    case (head +: tail, _) => new +:(head, tail +: this)
+    case _ => new +:(p, this)
+  }
+
+  def |:(p: Process[A])(implicit ord: Ordering[Process[A]]): Process[A] = (p, this) match {
+    case (Empty(), _) => this
+    case (_, Empty()) => p
+    case (head |: tail, _) =>
+      new |:(head, tail |: this)
+    case (_, head |: tail) => if (ord.compare(p, head) > 0)
+      new |:(head, p |: tail) else new |:(p, this)
+    case _ => if(ord.compare(p, this) > 0)
+      new |:(this, p) else new |:(p, this)
   }
 }
 
 case class Empty[A]() extends Process[A] {
   override def toString = "ε"
-  override def size = 0
-  override def length = 0
-  override def isEmpty = true
-  override def constants = Set.empty[A]
   override def head = throw new UnsupportedOperationException("head of empty process")
   override def tail = throw new UnsupportedOperationException("tail of empty process")
-  override def apply(idx: Int) = throw new IndexOutOfBoundsException(idx.toString)
-  override def toList = Nil
 }
 case class Const[A](id: A) extends Process[A] {
   override def toString = id.toString
-  override def size = 1
-  override def length = 1
-  override def isEmpty = false
-  override def constants = Set(id)
   override def head = this
   override def tail = Empty()
-  override def apply(idx: Int) = if(idx == 0) id else throw new IndexOutOfBoundsException(idx.toString)
-  override def toList = List(id)
 }
-case class |:[A](override val head: Process[A], override val tail: Process[A]) extends ComposedProcess[A] {
+case class |:[A](override val head: Process[A], override val tail: Process[A]) extends Process[A] {
   override def toString = "(" + head.toString + "|" + tail.toString + ")"
-  override def constants = head.constants | tail.constants
 }
-case class +:[A](override val head: Process[A], override val tail: Process[A]) extends ComposedProcess[A] {
+case class +:[A](override val head: Process[A], override val tail: Process[A]) extends Process[A] {
   override def toString = "(" + head.toString + "." + tail.toString + ")"
-  override def constants = head.constants | tail.constants
-}
-sealed abstract trait ComposedProcess[A] extends Process[A] {
-  override def size = head.size + tail.size + 1
-  override def length = 1 + tail.length
-  override def isEmpty = false
-  override def apply(idx: Int) = if(idx == 0) head(idx) else tail(idx - 1)
-  override def toList = head.toList ::: tail.toList
 }
 
 class ProcessOrdering[A](ord: Ordering[A]) extends Ordering[Process[A]] {
@@ -133,10 +83,6 @@ case class RewriteRule[A](
   require(lhs != Empty[A]())
 
   override def toString = lhs.toString + " " + action + ruleType + " " + rhs.toString
-
-  def apply(p: Process[A])(implicit ord: Ordering[A]): Set[Process[A]] = {
-    p.replace(lhs, Set(rhs))
-  }
 }
 sealed abstract class RuleType
 case object MayRule extends RuleType {
@@ -150,14 +96,9 @@ case object MustRule extends RuleType {
  * The class MPRS represents a modal process rewrite system given
  * by an inital process and a set of rewrite rules.
  */
-class MPRS[A](val initialLHS: Process[A], val initialRHS: Process[A],
+class MPRS[A](val initialLeft: Process[A], val initialRight: Process[A],
   val rules: Set[RewriteRule[A]])(implicit ord: Ordering[A]) {
-  
-  val actions = (rules map { _.action })
-  val constants = ((initialLHS.constants | initialRHS.constants) /: rules)
-    { (set, rule) => set | rule.lhs.constants | rule.rhs.constants }
 
-  override def toString = "InitialLHS: " + initialLHS + "\n" +
-      "InitialRHS: " + initialRHS + "\n" + rules.mkString("\n")
-  
+  override def toString =
+    initialLeft.toString + " ≤ " + initialRight.toString + "\n" + rules.mkString("\n")
 }

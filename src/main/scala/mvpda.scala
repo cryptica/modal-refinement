@@ -65,7 +65,7 @@ class RefinementTester[A] {
    * @param mprs the mPRS to be tested
    * @return true if the mPRS is a vPDA, otherwise false
    */ 
-  def makeVPDA(mprs: MPRS[A]) {
+  def makeVPDA(mprs: MPRS[A]) = {
     mprs.rules foreach { rule => rule match {
       case RewriteRule(rt, Const(l1) +: Const(l2), a, Const(r1)) =>
         val curRules = returnRules.getOrElse((a, rt), Map.empty)
@@ -88,6 +88,15 @@ class RefinementTester[A] {
     val a3 = callRules.keySet map { _._1 }
     if((a1 & a2).nonEmpty || (a2 & a3).nonEmpty || (a3 & a1).nonEmpty) {
       throw new IllegalArgumentException("Given mPRS is not a vPDA")
+    }
+    // initialize rules with rules from initial state
+    (mprs.initialLeft, mprs.initialRight) match {
+      case (Const(p1) +: Const(p2), Const(q1) +: Const(q2)) =>
+        val initial = ((p1, p2), (q1, q2))
+        addRulesFrom(initial)
+        initial
+      case _ =>
+        throw new IllegalArgumentException("Given mPRS is not a vPDA")
     }
   }
 
@@ -230,11 +239,7 @@ class RefinementTester[A] {
    *         otherwise false
    */
   def testRefinement(mprs: MPRS[A]): Boolean = {
-    makeVPDA(mprs)
-    // encode all states as pairs (lhs, rhs)
-    val initial = ((mprs.initialLHS(0), mprs.initialLHS(1)), (mprs.initialRHS(0), mprs.initialRHS(1)))
-    // initialize rules with rules from initial state
-    addRulesFrom(initial)
+    val initial = makeVPDA(mprs)
     var counter = 0
     var obsolete = 0
     while(workingSet.nonEmpty) {
