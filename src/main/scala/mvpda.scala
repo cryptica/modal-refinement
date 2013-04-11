@@ -8,7 +8,6 @@ import scala.collection.mutable.Queue
 
 class RefinementTester[A](mprs: MPRS[A]) {
   type State = (A, A)
-  type Call = Set[((A, A), A)]
   type Internal = (State, State)
 
   /**
@@ -52,7 +51,7 @@ class RefinementTester[A](mprs: MPRS[A]) {
       case (Const(p1) +: Const(p2), Const(q1) +: Const(q2)) =>
         ((p1, p2), (q1, q2))
       case _ =>
-        throw new IllegalArgumentException("Given mPRS is not a vPDA")
+        throw new IllegalArgumentException("Given mPRS is not an mvPDA")
     }
   }
   val returnRules = new HashMap[(String, RuleType), Map[State, Set[A]]]()
@@ -68,7 +67,7 @@ class RefinementTester[A](mprs: MPRS[A]) {
    * @param mprs the mPRS to be tested
    * @return true if the mPRS is a vPDA, otherwise false
    */ 
-  def makeVPDA() {
+  private def makeVPDA() {
     mprs.rules foreach { rule => rule match {
       case RewriteRule(rt, Const(l1) +: Const(l2), a, Const(r1)) =>
         val curRules = returnRules.getOrElse((a, rt), Map.empty)
@@ -83,14 +82,14 @@ class RefinementTester[A](mprs: MPRS[A]) {
         val curSet = curRules.getOrElse((l1, l2), Set.empty)
         callRules += (((a, rt), curRules + (((l1, l2), curSet + (((r1, r2), r3))))))
       case _ =>
-        throw new IllegalArgumentException("Given mPRS is not a vPDA")
+        throw new IllegalArgumentException("Given mPRS is not an mvPDA")
       }
     }
     val a1 = returnRules.keySet map { _._1 }
     val a2 = internalRules.keySet map { _._1 }
     val a3 = callRules.keySet map { _._1 }
     if((a1 & a2).nonEmpty || (a2 & a3).nonEmpty || (a3 & a1).nonEmpty) {
-      throw new IllegalArgumentException("Given mPRS is not a vPDA")
+      throw new IllegalArgumentException("Given mPRS is not an mvPDA")
     }
   }
   

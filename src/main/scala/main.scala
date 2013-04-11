@@ -111,15 +111,14 @@ object Main extends App {
       val t0 = System.nanoTime()
       val result = testFileForRefinement(file)
       val t1 = System.nanoTime()
-      val code = if(result) "y" else "n"
-      val time = (t1 - t0) / 1e9
+      val code = if(result) "1" else "0"
+      val time = (t1 - t0) * 1e-09
       println("[" + code + "] " + filename + " (" + time + " s)")
     }
     catch {
-      case e @ ( _: IllegalArgumentException
-               | _: IllegalTokenException
-               | _: IOException) =>
-        println("[e] " + filename + " (" + e + ")")
+      // possible exceptions: IllegalArgumentException, IllegalTokenException, IOException
+      case e: Exception =>
+        println("[E] " + filename + " (" + e + ")")
     }
   }
 }
