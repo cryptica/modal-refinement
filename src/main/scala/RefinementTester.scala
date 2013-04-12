@@ -3,8 +3,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.PriorityQueue
 
 class RefinementTester[A](mvpda: MVPDA[A]) {
-  type State = (Return[A], Return[A])
-  type LHS = (Internal[A], Internal[A])
+  type LHS = State[A, Internal[A]]
 
   val workingSet = new PriorityQueue[AttackRule[A]]()(Ordering.by{ rule => -(rule.size) })
   val stateSet = new HashSet[LHS]()
@@ -85,30 +84,28 @@ class RefinementTester[A](mvpda: MVPDA[A]) {
    * @return a list of AttackRules starting from the given state
    */ 
   def addAttacksFrom(lhs: LHS) {
-    def makeRuleFrom[B](
+    def makeRuleFrom[B <: MVPDAState[A]](
       rulesMap: Map[(String, RuleType), Map[Internal[A], Set[B]]]
-    )(makeRule: Set[(B, B)] => AttackRule[A]) = {
+    )(makeRule: Set[State[A, B]] => AttackRule[A]) = {
       for {
         ((_, ruleType), rhsMap) <- rulesMap
-        (lhs1, lhs2) = ruleType match {
+        lhs1 = ruleType match {
           case MayRule => lhs
           case MustRule => lhs.swap
         }
-        rhs1 <- rhsMap.getOrElse(lhs1, Set.empty)
-        rhs2list = rhsMap.getOrElse(lhs2, Set.empty)
+        rhs1 <- rhsMap.getOrElse(lhs1.left, Set.empty)
+        rhs2list = rhsMap.getOrElse(lhs1.right, Set.empty)
       } {
         val rhs = ruleType match {
-          case MayRule => rhs2list map { (rhs1, _) }
-          case MustRule => rhs2list map { (_, rhs1) }
+          case MayRule => rhs2list map { State[A, B](rhs1, _) }
+          case MustRule => rhs2list map { State[A, B](_, rhs1) }
         }
         add(makeRule(rhs))
       }
     }
     makeRuleFrom(mvpda.returnRules) { AttackRule.makeReturnRule(lhs, _) }
     makeRuleFrom(mvpda.internalRules) { AttackRule.makeInternalRule(lhs, _) }
-    makeRuleFrom(mvpda.callRules) { rhs =>
-      AttackRule.makeCallRule(lhs, rhs)
-    }
+    makeRuleFrom(mvpda.callRules) { AttackRule.makeCallRule(lhs, _) }
   }
 
   def combine(lhsRule: LhsAttackRule[A], rhsRule: RhsAttackRule[A]) {
@@ -129,7 +126,8 @@ class RefinementTester[A](mvpda: MVPDA[A]) {
             lhsRule.rhsCall + ((rhsRule.lhs, newCallTails))
           }
         val newRhsInternal = lhsRule.rhsInternal |
-          (rhsRule.rhsReturn map { rhs => ((rhs._1 + callTail._1), (rhs._2 + callTail._2)) })
+          (rhsRule.rhsReturn map { rhs =>
+            State[A, Internal[A]]((rhs.left + callTail.left), (rhs.right + callTail.right)) })
         val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall)
         //println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
         add(rule)

@@ -1,18 +1,21 @@
 
-abstract sealed class MVPDATransition[A]
-case class Return[A](rhs: A) extends MVPDATransition[A] {
-  def +(ret: Return[A]): Internal[A] = Internal((rhs, ret.rhs))
+abstract sealed class MVPDAState[A]
+case class Return[A](s: A) extends MVPDAState[A] {
+  def +(ret: Return[A]): Internal[A] = Internal((s, ret.s))
+  override def toString = s.toString
 }
-case class Internal[A](rhs: (A, A)) extends MVPDATransition[A] {
-  def +(ret: Return[A]): Call[A] = Call((rhs, ret.rhs))
+case class Internal[A](s: (A, A)) extends MVPDAState[A] {
+  def +(ret: Return[A]): Call[A] = Call((s, ret.s))
+  override def toString = s.toString
 }
-case class Call[A](rhs: ((A, A), A)) extends MVPDATransition[A] {
-  def head = Internal(rhs._1)
-  def tail = Return(rhs._2)
+case class Call[A](s: ((A, A), A)) extends MVPDAState[A] {
+  def head = Internal(s._1)
+  def tail = Return(s._2)
+  override def toString = s.toString
 }
 
 class MVPDA[A](
-  val initial: (Internal[A], Internal[A]),
+  val initial: State[A, Internal[A]],
   val returnRules: Map[(String, RuleType), Map[Internal[A], Set[Return[A]]]],
   val internalRules: Map[(String, RuleType), Map[Internal[A], Set[Internal[A]]]],
   val callRules: Map[(String, RuleType), Map[Internal[A], Set[Call[A]]]]
@@ -32,7 +35,7 @@ object MVPDA {
     val initial = {
       (mprs.initialLeft, mprs.initialRight) match {
         case (Const(p1) +: Const(p2), Const(q1) +: Const(q2)) =>
-          (Internal((p1, p2)), Internal((q1, q2)))
+          State[A, Internal[A]](Internal((p1, p2)), Internal((q1, q2)))
         case _ =>
           throw new IllegalArgumentException("Given mPRS is not an mvPDA")
       }

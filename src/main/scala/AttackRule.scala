@@ -1,3 +1,9 @@
+
+case class State[A, +S <: MVPDAState[A]](left: S, right: S) {
+  def swap: State[A, S] = State(left, left)
+  override def toString = "(" + left + "," + right + ")"
+}
+
 /**
  * This class encodes a single or combined attack moves
  * with all the possible results from applying defending moves.
@@ -5,66 +11,77 @@
  * @param rhs the set of possible destination states
  */
 abstract sealed class AttackRule[A] {
-  val lhs: (Internal[A], Internal[A])
-  val rhs: Seq[(MVPDATransition[A], MVPDATransition[A])]
+  val lhs: State[A, Internal[A]]
+  val rhs: List[State[A, MVPDAState[A]]]
+  def makeRhs(list: Seq[State[A, MVPDAState[A]]]) = list
   val size: Int
   override def toString = lhs.toString + " -> " + rhs.mkString("{",",","}")
 }
 
 case class LhsAttackRule[A](
-    lhs: (Internal[A], Internal[A]),
-    rhsReturn: Set[(Return[A], Return[A])],
-    rhsInternal: Set[(Internal[A], Internal[A])],
-    rhsCall: Map[(Internal[A], Internal[A]), Set[(Return[A], Return[A])]]
+    lhs: State[A, Internal[A]],
+    rhsReturn: Set[State[A, Return[A]]],
+    rhsInternal: Set[State[A, Internal[A]]],
+    rhsCall: Map[State[A, Internal[A]], Set[State[A, Return[A]]]]
   ) extends AttackRule[A] {
   override val hashCode = 41*(41*(41*(41 + lhs.hashCode) + rhsInternal.hashCode) + rhsCall.hashCode) + rhsReturn.hashCode
   val callComplete =
-    (rhsCall flatMap { rhs => rhs._2 map { r => (rhs._1._1 + r._1, (rhs._1._2 + r._2)) } }).toSet
+    (rhsCall flatMap { entry =>
+      val head = entry._1
+      val tails = entry._2
+      tails map { tail => (head.left + tail.left, head.right + tail.right) }
+    }).toSet
   val size = rhsInternal.size + rhsCall.size + callComplete.size
-  lazy val rhs = rhsReturn.toSeq ++ rhsInternal.toSeq ++ callComplete.toSeq
+  lazy val rhs = rhsReturn.toList// ++ rhsInternal.toList ++ callComplete.toList
 }
 
 case class RhsAttackRule[A](
-    lhs: (Internal[A], Internal[A]),
-    rhsReturn: Set[(Return[A], Return[A])]
+    lhs: State[A, Internal[A]],
+    rhsReturn: Set[State[A, Return[A]]]
   ) extends AttackRule[A] {
   override val hashCode = 31*(31 + lhs.hashCode) + rhsReturn.hashCode
   val size = rhsReturn.size
-  lazy val rhs = rhsReturn.toSeq
+  lazy val rhs = rhsReturn.toList
 }
 
 object AttackRule {
   def makeReturnRule[A](
-    lhs: (Internal[A], Internal[A]),
-    rhsReturn: Set[(Return[A], Return[A])]
+    lhs: State[A, Internal[A]],
+    rhsReturn: Set[State[A, Return[A]]]
   ): AttackRule[A] = 
   makeRule(lhs, rhsReturn, Set.empty, Map.empty)
 
   def makeInternalRule[A](
-    lhs: (Internal[A], Internal[A]),
-    rhsInternal: Set[(Internal[A], Internal[A])]
+    lhs: State[A, Internal[A]],
+    rhsInternal: Set[State[A, Internal[A]]]
   ): AttackRule[A] = 
   makeRule(lhs, Set.empty, rhsInternal, Map.empty)
 
   def makeCallRule[A](
-    lhs: (Internal[A], Internal[A]),
-    rhsCallSet: Set[(Call[A], Call[A])]
+    lhs: State[A, Internal[A]],
+    rhsCallSet: Set[State[A, Call[A]]]
   ): AttackRule[A] = {
-    var rhsCall = Map[(Internal[A], Internal[A]), Set[(Return[A], Return[A])]]()
+    var rhsCall = Map[State[A, Internal[A]], Set[State[A, Return[A]]]]()
     rhsCallSet foreach { rhs =>
-      val head = (rhs._1.head, rhs._2.head)
-      val tail = (rhs._1.tail, rhs._2.tail)
+      val head = State[A, Internal[A]](rhs.left.head, rhs.right.head)
+      val tail = State[A, Return[A]](rhs.left.tail, rhs.right.tail)
       rhsCall += ((head, rhsCall.getOrElse(head, Set.empty) + tail))
     }
     makeRule(lhs, Set.empty, Set.empty, rhsCall)
   }
 
+  /*def makeRule[A](
+    lhs: State[A, Internal[A]],
+    rhs: State[A, MVPDAState[A]]
+  ): AttackRule[A] = {
+
+  }*/
   def makeRule[A](
-      lhs: (Internal[A], Internal[A]),
-      rhsReturn: Set[(Return[A], Return[A])],
-      rhsInternal: Set[(Internal[A], Internal[A])],
-      rhsCall: Map[(Internal[A], Internal[A]), Set[(Return[A], Return[A])]]
-    ): AttackRule[A] = {
+    lhs: State[A, Internal[A]],
+    rhsReturn: Set[State[A, Return[A]]],
+    rhsInternal: Set[State[A, Internal[A]]],
+    rhsCall: Map[State[A, Internal[A]], Set[State[A, Return[A]]]]
+  ): AttackRule[A] = {
     if(rhsInternal.isEmpty && rhsCall.isEmpty) {
       RhsAttackRule[A](lhs, rhsReturn)
     }
