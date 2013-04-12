@@ -93,12 +93,8 @@ case object MustRule extends RuleType {
 }
 
 /**
- * The class MPRS represents a modal process rewrite system given
- * by an inital process and a set of rewrite rules.
+ * The class MPRS represents a modal process rewrite system.
  */
-class MPRS[A](val initialLeft: Process[A], val initialRight: Process[A],
-  val rules: Set[RewriteRule[A]])(implicit ord: Ordering[A]) {
-
-  override def toString =
-    initialLeft.toString + " ≤ " + initialRight.toString + "\n" + rules.mkString("\n")
+class MPRS[A](val rules: Set[RewriteRule[A]])(implicit ord: Ordering[A]) {
+  override def toString = rules.mkString("\n")
 }

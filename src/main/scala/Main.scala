@@ -57,15 +57,16 @@ object MPRSParser {
     }
   }
 
-  def fromAST(ast: CommonTree): MPRS[String] = {
+  def fromAST(ast: CommonTree) = {
     val token = ast.getToken
     val tokenType = token.getType
     if(tokenType == xMPRSParser.MPRS) {
       val children = getChildren(ast)
-      val initialLeft = makeProcess(children(0))
-      val initialRight = makeProcess(children(1))
+      val p = makeProcess(children(0))
+      val q = makeProcess(children(1))
       val rules = (children.drop(2) map { makeRule(_) }).flatten
-      new MPRS(initialLeft, initialRight, rules.toSet)
+      val mprs = new MPRS(rules.toSet)
+      (p, q, mprs)
     }
     else {
       throw new IllegalTokenException("Expected an mPRS, got " + tokenType)
@@ -99,11 +100,12 @@ object Main extends App {
     val mprsTree = parser.mprs
     input.close()
     val result = mprsTree.tree.asInstanceOf[CommonTree];
-    val mprs = MPRSParser.fromAST(result)
+    val (p, q, mprs) = MPRSParser.fromAST(result)
+    val initial = MVPDA.makeInitial(p, q)
     val mvpda = MVPDA.makeMVPDA(mprs)
     //println(mprs)
     val tester = new RefinementTester(mvpda)
-    tester.testRefinement()
+    tester.testRefinement(initial)
   }
 
   for(filename <- args) {
