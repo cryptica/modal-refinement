@@ -1,19 +1,4 @@
 
-abstract sealed class MVPDAState[A]
-case class Return[A](s1: A) extends MVPDAState[A] {
-  def +(that: Return[A]): Internal[A] = Internal(s1, that.s1)
-  override def toString = s1.toString
-}
-case class Internal[A](s1: A, s2: A) extends MVPDAState[A] {
-  def +(that: Return[A]): Call[A] = Call(s1, s2, that.s1)
-  override def toString = s1 + "." + s2
-}
-case class Call[A](s1: A, s2: A, s3: A) extends MVPDAState[A] {
-  def head = Internal(s1, s2)
-  def tail = Return(s3)
-  override def toString = s1 + "." + s2 + "." + s3
-}
-
 class MVPDA[A](
   val returnRules: Map[(String, RuleType), Map[Internal[A], Set[Return[A]]]],
   val internalRules: Map[(String, RuleType), Map[Internal[A], Set[Internal[A]]]],

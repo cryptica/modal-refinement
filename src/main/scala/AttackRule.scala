@@ -1,30 +1,4 @@
 
-/*case class State[A, +S <: MVPDAState[A]](left: S, right: S) {
-  def swap: State[A, S] = State(right, left)
-  override def toString = "(" + left + "," + right + ")"
-}*/
-
-abstract sealed class State[A] {
-  type S <: MVPDAState[A]
-  val left: S
-  val right: S
-  override def toString = "(" + left + "," + right + ")"
-}
-case class ReturnState[A](left: Return[A], right: Return[A]) extends State[A] {
-  type S = Return[A]
-  def +(that: ReturnState[A]): InternalState[A] =
-    InternalState(left + that.left, right + that.right)
-}
-case class InternalState[A](left: Internal[A], right: Internal[A]) extends State[A] {
-  type S = Internal[A]
-  def swap = InternalState(right, left)
-  def +(that: ReturnState[A]): CallState[A] =
-    CallState(left + that.left, right + that.right)
-}
-case class CallState[A](left: Call[A], right: Call[A]) extends State[A] {
-  type S = Call[A]
-}
-
 /**
  * This class encodes a single or combined attack moves
  * with all the possible results from applying defending moves.
@@ -91,9 +65,7 @@ object AttackRule {
   ): AttackRule[A] = {
     var rhsCall = Map[InternalState[A], Set[ReturnState[A]]]()
     rhsCallSet foreach { rhs =>
-      val head = InternalState[A](rhs.left.head, rhs.right.head)
-      val tail = ReturnState[A](rhs.left.tail, rhs.right.tail)
-      rhsCall += ((head, rhsCall.getOrElse(head, Set.empty) + tail))
+      rhsCall += ((rhs.head, rhsCall.getOrElse(rhs.head, Set.empty) + rhs.tail))
     }
     makeRule(lhs, Set.empty, Set.empty, rhsCall)
   }

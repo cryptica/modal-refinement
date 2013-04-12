@@ -73,16 +73,16 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
     )(makeState: (B, B) => C)(makeRule: Set[C] => AttackRule[A]) = {
       for {
         ((_, ruleType), rhsMap) <- rulesMap
-        lhs1 = ruleType match {
-          case MayRule => lhs
-          case MustRule => lhs.swap
+        (lhs1, lhs2) = ruleType match {
+          case MayRule => (lhs.left, lhs.right)
+          case MustRule => (lhs.right, lhs.left)
         }
-        rhs1 <- rhsMap.getOrElse(lhs1.left, Set.empty)
-        rhs2list = rhsMap.getOrElse(lhs1.right, Set.empty)
+        rhs1 <- rhsMap.getOrElse(lhs1, Set.empty)
       } {
-        val rhs = rhs2list map { ruleType match {
-            case MayRule => makeState(rhs1, _)
-            case MustRule => makeState(_, rhs1)
+        val rhs = rhsMap.getOrElse(lhs2, Set.empty) map {
+          rhs2 => ruleType match {
+            case MayRule => makeState(rhs1, rhs2)
+            case MustRule => makeState(rhs2, rhs1)
           }
         }
         addToWorklist(makeRule(rhs))
@@ -105,7 +105,6 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       val newRhsReturn = lhsRule.rhsReturn | rhsRule.rhsReturn
       val rule = AttackRule.makeRule(lhsRule.lhs, newRhsReturn, newRhsInternal,
           lhsRule.rhsCall, lhsRule.rhsCallMap)
-      //println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
       addToWorklist(rule)
     }
     lhsRule.rhsCallMap.get(rhsRule.lhs) foreach { callTails =>
@@ -120,7 +119,6 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
         val newRhsInternal =
           lhsRule.rhsInternal | (rhsRule.rhsReturn map { rhs => rhs + callTail })
         val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall)
-        //println("Combined rule " + rule + " from " + lhsRule + " and " + rhsRule)
         addToWorklist(rule)
       }
     }
@@ -144,29 +142,23 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       counter += 1
       val rule = workingList.dequeue
       if((counter < 50) || (counter < 100 && counter % 10 == 0) || (counter < 1000 && counter % 100 == 0) || counter % 1000 == 0) {
-        //println("Got from worklist rule num " + counter)
-        //println("Num of all rules: " + ((0, 0) /: allMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        //println("Num of rhs rules: " + ((0, 0) /: rhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        //println("Num of lhs rules: " + ((0, 0) /: lhsMap) {(n,e) => (n._1 + 1, n._2 + e._2.size) })
-        //println("Number of obsolete rules is " + obsolete)
         println("Cur rule " + rule + "; num " + counter + "; total number of rules " + numRules + "; number of obsolete rules " + obsolete)
       }
       // check if winning strategy for attacker has been found
       if(rule.lhs == initial && rule.size == 0) {
-        //println("Found winning strategy " + rule)
         return false
       }
       else if(addRule(rule)) {
         rule match {
           case lhsRule @ LhsAttackRule(_,_,rhsInternal,_,rhsCallMap) =>
-            for{ lhsRhs <- (rhsInternal | rhsCallMap.keySet) } {
+            (rhsInternal | rhsCallMap.keySet) foreach { lhsRhs =>
               addRulesFromState(lhsRhs)
-              for{ rhsRule <- rhsMap.getOrElse(lhsRhs, Set.empty) } {
+              rhsMap.getOrElse(lhsRhs, Set.empty) foreach { rhsRule =>
                 combine(lhsRule, rhsRule)
               }
             }
           case rhsRule @ RhsAttackRule(lhs,_) =>
-            for{ lhsRule <- lhsMap.getOrElse(lhs, Set.empty) } {
+            lhsMap.getOrElse(lhs, Set.empty) foreach { lhsRule =>
               combine(lhsRule, rhsRule)
             }
         }
@@ -176,8 +168,6 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       }
     }
     // no winning strategy for attacker found, so the states refine
-    //println("Total number of rules is " + numRules)
-    //println("Number of obsolete rules is " + obsolete)
-    return true
+    allMap(initial) forall { _.size != 0 }
   }
 }
