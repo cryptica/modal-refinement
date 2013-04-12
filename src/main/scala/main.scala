@@ -100,8 +100,9 @@ object Main extends App {
     input.close()
     val result = mprsTree.tree.asInstanceOf[CommonTree];
     val mprs = MPRSParser.fromAST(result)
+    val mvpda = MVPDA.makeMVPDA(mprs)
     //println(mprs)
-    val tester = new RefinementTester(mprs)
+    val tester = new RefinementTester(mvpda)
     tester.testRefinement()
   }
 
