@@ -1,0 +1,5 @@
+Usage:
+To run the refinement test on a list of files containing mvPDAs:
+
+java -jar mvpda-refinement.jar [FILE]...
+

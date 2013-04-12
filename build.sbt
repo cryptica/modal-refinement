@@ -1,4 +1,4 @@
-name := "Algorithms for refinement of modal process rewrite systems"
+name := "mvpda-refinement"
 
 version := "0.1"
 
@@ -11,4 +11,6 @@ scalacOptions += "-unchecked"
 libraryDependencies += "org.scalatest" %% "scalatest" % "1.9.1" % "test"
 
 antlrSettings
+
+com.github.retronym.SbtOneJar.oneJarSettings
 
