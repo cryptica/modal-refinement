@@ -12,7 +12,7 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
   val lhsMap = new HashMap[InternalState[A], Set[LhsAttackRule[A]]]()
   var numRules = 0
   
-  private def addRulesFromState(lhs: InternalState[A]) {
+  private def addState(lhs: InternalState[A]) {
     if(stateSet.add(lhs)) {
       addAttacksFrom(lhs)
     }
@@ -20,6 +20,18 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
 
   private def addRule(rule: AttackRule[A]): Boolean = {
     var rules = allMap.getOrElse(rule.lhs, Set.empty)
+    if(rules.contains(rule)) {
+      return false
+    }
+    // TODO: document
+    /*rule match {
+      case lhsRule @ LhsAttackRule(lhs,_,rhsInternal,_,rhsCallMap) =>
+        if(rhsInternal.contains(lhs)) {
+          // useless rule
+          return false
+        }
+      case _ =>
+    }*/
     // check for inclusion of rules
     rules foreach { oldRule =>
       // a smaller rule is
@@ -110,7 +122,7 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
     lhsRule.rhsCallMap.get(rhsRule.lhs) foreach { callTails =>
       callTails foreach { callTail =>
         val newCallTails = callTails - callTail
-        val newRhsCall = if(newCallTails.isEmpty) {
+        val newRhsCallMap = if(newCallTails.isEmpty) {
             lhsRule.rhsCallMap - rhsRule.lhs
           }
           else {
@@ -118,7 +130,9 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
           }
         val newRhsInternal =
           lhsRule.rhsInternal | (rhsRule.rhsReturn map { rhs => rhs + callTail })
-        val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal, newRhsCall)
+        val newRhsCall = lhsRule.rhsCall - (rhsRule.lhs + callTail)
+        val rule = AttackRule.makeRule(lhsRule.lhs, lhsRule.rhsReturn, newRhsInternal,
+            newRhsCall, newRhsCallMap)
         addToWorklist(rule)
       }
     }
@@ -133,26 +147,25 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
    * @return true if the lhs state of the mPRS refines the rhs state,
    *         otherwise false
    */
-  def testRefinement(initial: InternalState[A]): Boolean = {
-    addRulesFromState(initial)
+  def testRefinement(initial: InternalState[A], verbose: Boolean = false): (Int, Boolean) = {
+    addState(initial)
     var counter = 0
-    var obsolete = 0
     while(workingList.nonEmpty) {
       // get rule from worklist
-      counter += 1
       val rule = workingList.dequeue
-      if((counter < 50) || (counter < 100 && counter % 10 == 0) || (counter < 1000 && counter % 100 == 0) || counter % 1000 == 0) {
-        println("Cur rule " + rule + "; num " + counter + "; total number of rules " + numRules + "; number of obsolete rules " + obsolete)
+      if(verbose) {
+        println(counter + ": " + rule)
       }
       // check if winning strategy for attacker has been found
       if(rule.lhs == initial && rule.size == 0) {
-        return false
+        return (counter, false) // TODO just return false
       }
       else if(addRule(rule)) {
+        counter += 1
         rule match {
           case lhsRule @ LhsAttackRule(_,_,rhsInternal,_,rhsCallMap) =>
             (rhsInternal | rhsCallMap.keySet) foreach { lhsRhs =>
-              addRulesFromState(lhsRhs)
+              addState(lhsRhs)
               rhsMap.getOrElse(lhsRhs, Set.empty) foreach { rhsRule =>
                 combine(lhsRule, rhsRule)
               }
@@ -163,11 +176,8 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
             }
         }
       }
-      else {
-        obsolete += 1
-      }
     }
     // no winning strategy for attacker found, so the states refine
-    allMap(initial) forall { _.size != 0 }
+    (counter, true)
   }
 }

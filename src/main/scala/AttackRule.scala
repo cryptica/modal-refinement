@@ -36,48 +36,21 @@ case class RhsAttackRule[A](
     rhsReturn: Set[ReturnState[A]]
   ) extends AttackRule[A] {
   val rhs = Set.empty[State[A]] ++ rhsReturn
-  override def <=(that: AttackRule[A]) =
-    lhs == that.lhs &&
-    (that match {
-      case RhsAttackRule(_,thatRhsReturn) =>
-        (rhsReturn subsetOf thatRhsReturn)
-      case LhsAttackRule(_,thatRhsReturn,_,_,_) =>
-        (rhsReturn subsetOf thatRhsReturn)
-    })
 }
 
 object AttackRule {
-  def makeReturnRule[A](
-    lhs: InternalState[A],
-    rhsReturn: Set[ReturnState[A]]
-  ): AttackRule[A] = 
-  makeRule(lhs, rhsReturn, Set.empty, Map.empty)
+  def makeReturnRule[A](lhs: InternalState[A], rhsReturn: Set[ReturnState[A]]) =
+    makeRule[A](lhs, rhsReturn, Set.empty, Set.empty, Map.empty)
 
-  def makeInternalRule[A](
-    lhs: InternalState[A],
-    rhsInternal: Set[InternalState[A]]
-  ): AttackRule[A] = 
-  makeRule(lhs, Set.empty, rhsInternal, Map.empty)
+  def makeInternalRule[A](lhs: InternalState[A], rhsInternal: Set[InternalState[A]]) =
+    makeRule[A](lhs, Set.empty, rhsInternal, Set.empty, Map.empty)
 
-  def makeCallRule[A](
-    lhs: InternalState[A],
-    rhsCallSet: Set[CallState[A]]
-  ): AttackRule[A] = {
-    var rhsCall = Map[InternalState[A], Set[ReturnState[A]]]()
-    rhsCallSet foreach { rhs =>
-      rhsCall += ((rhs.head, rhsCall.getOrElse(rhs.head, Set.empty) + rhs.tail))
+  def makeCallRule[A](lhs: InternalState[A], rhsCall: Set[CallState[A]]) = {
+    var rhsCallMap = Map[InternalState[A], Set[ReturnState[A]]]()
+    rhsCall foreach { rhs =>
+      rhsCallMap += ((rhs.head, rhsCallMap.getOrElse(rhs.head, Set.empty) + rhs.tail))
     }
-    makeRule(lhs, Set.empty, Set.empty, rhsCall)
-  }
-  
-  def makeRule[A](
-    lhs: InternalState[A],
-    rhsReturn: Set[ReturnState[A]],
-    rhsInternal: Set[InternalState[A]],
-    rhsCallMap: Map[InternalState[A], Set[ReturnState[A]]]
-  ): AttackRule[A] = {
-    val rhsCall = (rhsCallMap flatMap { entry => entry._2 map { tail => entry._1 + tail } }).toSet
-    makeRule(lhs, rhsReturn, rhsInternal, rhsCall, rhsCallMap)
+    makeRule[A](lhs, Set.empty, Set.empty, rhsCall, rhsCallMap)
   }
   
   def makeRule[A](

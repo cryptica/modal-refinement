@@ -19,14 +19,16 @@ class VPDARefinementSpec extends FlatSpec {
   val posFiles = getFilenamesFrom("positive")
   posFiles foreach { file =>
     file.toString should "refine" in {
-      assert(Main.testFileForRefinement(file))
+      val (rules, res) = Main.testFileForRefinement(file, false)
+      assert(res)
     }
   }
   
   val negFiles = getFilenamesFrom("negative")
   negFiles foreach { file =>
     file.toString should "not refine" in {
-      assert(!Main.testFileForRefinement(file))
+      val (rules, res) = Main.testFileForRefinement(file, true)
+      assert(!res)
     }
   }
 }

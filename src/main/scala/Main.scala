@@ -76,23 +76,7 @@ object MPRSParser {
 
 object Main extends App {
 
-  private def treeToSeq(ast: CommonTree): List[String] = {
-    val buffer = new ListBuffer[String]()
-    val token = ast.getToken
-    buffer += token.getText
-    val children = ast.getChildren
-    val childlist = if(children != null) {
-      buffer += "("
-      children.asScala map { child => 
-        val tree = child.asInstanceOf[CommonTree]
-        buffer ++= treeToSeq(tree)
-      }
-      buffer += ")"
-    }
-    buffer.toList
-  }
-
-  def testFileForRefinement(file: File) = {
+  def testFileForRefinement(file: File, verbose: Boolean) = {
     val input = new FileInputStream(file)
     val lexer = new xMPRSLexer(new ANTLRInputStream((input)))
     val tokens = new CommonTokenStream(lexer)
@@ -105,18 +89,24 @@ object Main extends App {
     val mvpda = MVPDA.makeMVPDA(mprs)
     //println(mprs)
     val tester = new RefinementTester(mvpda)
-    tester.testRefinement(initial)
+    tester.testRefinement(initial, verbose)
   }
+  
+  val verbose = args.contains("-v")
+  val filenames = args.filter(_ != "-v")
 
-  for(filename <- args) {
+
+// TODO remove i
+  for { filename <- filenames; i <- 1 to 50 } {
     try {
-      val file = new File(filename)
+      val file = new File(filename + i)
       val t0 = System.nanoTime()
-      val result = testFileForRefinement(file)
+      val (numRules, result) = testFileForRefinement(file, verbose)
       val t1 = System.nanoTime()
       val code = if(result) "1" else "0"
       val time = (t1 - t0) * 1e-09
-      println("[" + code + "] " + filename + " (" + time + " s)")
+      //println("[" + code + "] " + filename + " (" + "%.3f".format(time) + " s)")
+      println(code + " " + i + ".0 " + time + " " + numRules)
     }
     catch {
       // possible exceptions: IllegalArgumentException, IllegalTokenException, IOException

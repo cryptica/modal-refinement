@@ -58,7 +58,7 @@ object MVPDA {
     val a2 = internalRules.keySet map { _._1 }
     val a3 = callRules.keySet map { _._1 }
     if((a1 & a2).nonEmpty || (a2 & a3).nonEmpty || (a3 & a1).nonEmpty) {
-      error("action set can not be partitioned")
+      error("action alphabet can not be partitioned")
     }
     new MVPDA(returnRules, internalRules, callRules)
   }
