@@ -4,13 +4,12 @@ import scala.collection.mutable.PriorityQueue
 
 class RefinementTester[A](mvPDA: MVPDA[A]) {
 
-  val workingList = new PriorityQueue[AttackRule[A]]()(Ordering.by{ rule => -(rule.size) })
-  val stateSet = new HashSet[InternalState[A]]()
+  private val workingList = new PriorityQueue[AttackRule[A]]()(Ordering.by{ rule => -(rule.size) })
+  private val stateSet = new HashSet[InternalState[A]]()
 
-  val allMap = new HashMap[InternalState[A], Set[AttackRule[A]]]()
-  val rhsMap = new HashMap[InternalState[A], Set[RhsAttackRule[A]]]()
-  val lhsMap = new HashMap[InternalState[A], Set[LhsAttackRule[A]]]()
-  var numRules = 0
+  private val allMap = new HashMap[InternalState[A], Set[AttackRule[A]]]()
+  private val rhsMap = new HashMap[InternalState[A], Set[RhsAttackRule[A]]]()
+  private val lhsMap = new HashMap[InternalState[A], Set[LhsAttackRule[A]]]()
   
   private def addState(lhs: InternalState[A]) {
     if(stateSet.add(lhs)) {
@@ -40,7 +39,6 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       }
       if(rule <= oldRule) {
         rules -= oldRule
-        numRules -= 1
         oldRule match {
           case lhsRule @ LhsAttackRule(_,_,rhsInternal,_,rhsCallMap) => 
             (rhsInternal | rhsCallMap.keySet) foreach { rhs =>
@@ -53,7 +51,6 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
     }
     // add rule to map
     allMap += ((rule.lhs, rules + rule))
-    numRules += 1
     rule match {
       case lhsRule @ LhsAttackRule(_,_,rhsInternal,_,rhsCallMap) => 
         (rhsInternal | rhsCallMap.keySet) foreach { rhs =>
@@ -65,7 +62,7 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
     return true
   }
 
-  def addToWorklist(rule: AttackRule[A]) {
+  private def addToWorklist(rule: AttackRule[A]) {
     val rules = allMap.getOrElse(rule.lhs, Set.empty)
     if(!(rules exists { _ <= rule })) {
       workingList += rule
@@ -111,7 +108,7 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       { AttackRule.makeCallRule(lhs, _) }
   }
 
-  def combine(lhsRule: LhsAttackRule[A], rhsRule: RhsAttackRule[A]) {
+  private def combine(lhsRule: LhsAttackRule[A], rhsRule: RhsAttackRule[A]) {
     if(lhsRule.rhsInternal.contains(rhsRule.lhs)) {
       val newRhsInternal = lhsRule.rhsInternal - rhsRule.lhs
       val newRhsReturn = lhsRule.rhsReturn | rhsRule.rhsReturn
@@ -147,7 +144,7 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
    * @return true if the lhs state of the mPRS refines the rhs state,
    *         otherwise false
    */
-  def testRefinement(initial: InternalState[A], verbose: Boolean = false): (Int, Boolean) = {
+  def testRefinement(initial: InternalState[A], verbose: Boolean = false): Boolean = {
     addState(initial)
     var counter = 0
     while(workingList.nonEmpty) {
@@ -158,7 +155,7 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       }
       // check if winning strategy for attacker has been found
       if(rule.lhs == initial && rule.size == 0) {
-        return (counter, false) // TODO just return false
+        return false
       }
       else if(addRule(rule)) {
         counter += 1
@@ -178,6 +175,6 @@ class RefinementTester[A](mvPDA: MVPDA[A]) {
       }
     }
     // no winning strategy for attacker found, so the states refine
-    (counter, true)
+    return true
   }
 }

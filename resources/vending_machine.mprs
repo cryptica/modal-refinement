@@ -1,0 +1,26 @@
+mprs vpda [
+    P.S <= Q.S
+
+    P.S coin! P.M.S
+    P.M coin! P.M.M
+    P.M tea! T
+    P.M coffee! C
+
+    T.M tea! T
+    T.S coin! P.M.S
+
+    C.M coffee! C
+    C.S coin! P.M.S
+
+
+    Q.S coin? Q.T.S
+    Q.S coin? Q.C.S
+    Q.T coin? Q.T.T
+    Q.C coin? Q.C.C
+
+    Q.T tea! Q
+    Q.T coffee? Q
+
+    Q.C coffee! Q
+    Q.C tea? Q
+]

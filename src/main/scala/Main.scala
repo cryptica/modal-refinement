@@ -76,7 +76,7 @@ object MPRSParser {
 
 object Main extends App {
 
-  def testFileForRefinement(file: File, verbose: Boolean) = {
+  def testFileForRefinement(file: File, verbose: Boolean = false) = {
     val input = new FileInputStream(file)
     val lexer = new xMPRSLexer(new ANTLRInputStream((input)))
     val tokens = new CommonTokenStream(lexer)
@@ -87,7 +87,6 @@ object Main extends App {
     val (p, q, mprs) = MPRSParser.fromAST(result)
     val initial = MVPDA.makeInitial(p, q)
     val mvpda = MVPDA.makeMVPDA(mprs)
-    //println(mprs)
     val tester = new RefinementTester(mvpda)
     tester.testRefinement(initial, verbose)
   }
@@ -95,18 +94,15 @@ object Main extends App {
   val verbose = args.contains("-v")
   val filenames = args.filter(_ != "-v")
 
-
-// TODO remove i
-  for { filename <- filenames; i <- 1 to 50 } {
+  for { filename <- filenames } {
     try {
-      val file = new File(filename + i)
+      val file = new File(filename)
       val t0 = System.nanoTime()
-      val (numRules, result) = testFileForRefinement(file, verbose)
+      val result = testFileForRefinement(file, verbose)
       val t1 = System.nanoTime()
       val code = if(result) "1" else "0"
       val time = (t1 - t0) * 1e-09
-      //println("[" + code + "] " + filename + " (" + "%.3f".format(time) + " s)")
-      println(code + " " + i + ".0 " + time + " " + numRules)
+      println("[" + code + "] " + filename + " (" + "%.3f".format(time) + " s)")
     }
     catch {
       // possible exceptions: IllegalArgumentException, IllegalTokenException, IOException

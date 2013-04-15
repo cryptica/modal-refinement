@@ -1,0 +1,7 @@
+mprs rules [
+    P.S <= Q.S
+
+    P.S a! P.S.S
+    Q.S a! Q.S
+]
+

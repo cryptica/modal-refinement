@@ -1,8 +1,8 @@
 
-class MVPDA[A](
-  val returnRules: Map[(String, RuleType), Map[Internal[A], Set[Return[A]]]],
-  val internalRules: Map[(String, RuleType), Map[Internal[A], Set[Internal[A]]]],
-  val callRules: Map[(String, RuleType), Map[Internal[A], Set[Call[A]]]]
+case class MVPDA[A](
+  returnRules: Map[(String, RuleType), Map[Internal[A], Set[Return[A]]]],
+  internalRules: Map[(String, RuleType), Map[Internal[A], Set[Internal[A]]]],
+  callRules: Map[(String, RuleType), Map[Internal[A], Set[Call[A]]]]
 )
 
 object MVPDA {
@@ -17,12 +17,7 @@ object MVPDA {
   }
 
   /**
-   * Test if the given modal process rewrite system is
-   * a visible PDA. An mPRS is a vPDA if the actions can
-   * be partitioned into three sets for internal, call or
-   * return actions.
-   * @param mprs the mPRS to be tested
-   * @return true if the mPRS is a vPDA, otherwise false
+   * 
    */ 
   def makeMVPDA[A](mprs: MPRS[A]): MVPDA[A] = {
 

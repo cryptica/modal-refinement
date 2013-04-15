@@ -1,11 +1,13 @@
 /**
- * The class Process represents a process term given by
- *  P ::= ε
- *      | X
- *      | t_1. … .t_n
- *      | t_1 |: … |: t_n
- * where ε denotes the empty process, X the constant process and
- * t_1 to t_n are process terms.
+ * A Process represents a process in a PRS.
+ * It is either the empty process, a constant process,
+ * a sequential composition of processes via +: or
+ * a parallel composition of processes via |:.
+ *
+ * When constructing a process via the factory methods
+ * in the companion object or via methods from an
+ * existing process, it is always guaranted that
+ * a process is in normal form.
 **/
 sealed abstract class Process[A] {
   def head: Process[A]
@@ -61,15 +63,18 @@ class ProcessOrdering[A](ord: Ordering[A]) extends Ordering[Process[A]] {
 }
 
 object Process {
-  implicit def processOrdering[A](implicit ord: Ordering[A]): Ordering[Process[A]] = new ProcessOrdering(ord)
+  implicit def processOrdering[A](implicit ord: Ordering[A]): Ordering[Process[A]] =
+    new ProcessOrdering(ord)
 
   def makeEmpty[A] = new Empty[A]()
   def makeConst[A](const: A) = Const(const)
-  def makeParallel[A](children: List[Process[A]])(implicit ord: Ordering[A]): Process[A] = children match {
+  def makeParallel[A](children: List[Process[A]])(implicit ord: Ordering[A]): Process[A] =
+  children match {
     case Nil => Empty()
     case head :: tail => head |: makeParallel(tail)
   }
-  def makeSequential[A](children: List[Process[A]]): Process[A] = children match {
+  def makeSequential[A](children: List[Process[A]]): Process[A] =
+  children match {
     case Nil => Empty()
     case head :: tail => head +: makeSequential(tail)
   }
