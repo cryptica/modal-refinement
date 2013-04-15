@@ -1,4 +1,3 @@
-
 /**
  * This class encodes a single or combined attack moves
  * with all the possible results from applying defending moves.
@@ -13,6 +12,11 @@ abstract sealed class AttackRule[A] {
   def <=(that: AttackRule[A]) = (lhs == that.lhs) && (rhs subsetOf that.rhs)
 }
 
+/**
+ * A left-hand side attack rule is given by separating
+ * the rhs into return, internal and call states.
+ * For the call states, there also is a map allowing faster matching.
+ */
 case class LhsAttackRule[A](
     lhs: InternalState[A],
     rhsReturn: Set[ReturnState[A]],
@@ -31,6 +35,10 @@ case class LhsAttackRule[A](
   }
 }
 
+/**
+ * A right-hand side attack rule is given by having
+ * only returns states as the rhs.
+ */
 case class RhsAttackRule[A](
     lhs: InternalState[A],
     rhsReturn: Set[ReturnState[A]]
